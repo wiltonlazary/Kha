@@ -1,10 +1,7 @@
 package kha.graphics4;
 
 import js.html.webgl.GL;
-import kha.graphics4.FragmentShader;
 import kha.graphics4.VertexData;
-import kha.graphics4.VertexShader;
-import kha.graphics4.VertexStructure;
 
 class PipelineState extends PipelineStateBase {
 	private var program: Dynamic = null;
@@ -91,6 +88,9 @@ class PipelineState extends PipelineStateBase {
 	
 	public function getConstantLocation(name: String): kha.graphics4.ConstantLocation {
 		var location = SystemImpl.gl.getUniformLocation(program, name);
+		if (location == null) {
+			trace("Warning: Uniform " + name + " not found.");
+		}
 		var type = GL.FLOAT;
 		var count: Int = SystemImpl.gl.getProgramParameter(program, GL.ACTIVE_UNIFORMS);
 		for (i in 0...count) {
@@ -107,6 +107,9 @@ class PipelineState extends PipelineStateBase {
 		var index = findTexture(name);
 		if (index < 0) {
 			var location = SystemImpl.gl.getUniformLocation(program, name);
+			if (location == null) {
+				trace("Warning: Sampler " + name + " not found.");
+			}
 			index = textures.length;
 			textureValues.push(location);
 			textures.push(name);

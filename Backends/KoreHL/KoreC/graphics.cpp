@@ -7,11 +7,11 @@ extern "C" void hl_kore_graphics_clear(int flags, int color, float z, int stenci
 }
 
 extern "C" bool hl_kore_graphics_vsynced() {
-	return Kore::Graphics4::vsynced();
+	return true;// Kore::Graphics4::vsynced();
 }
 
 extern "C" int hl_kore_graphics_refreshrate() {
-	return Kore::Graphics4::refreshRate();
+	return 60;// Kore::Graphics4::refreshRate();
 }
 
 extern "C" void hl_kore_graphics_viewport(int x, int y, int width, int height) {
@@ -67,6 +67,16 @@ extern "C" void hl_kore_graphics_set_texture3d_parameters(vbyte *unit, int uAddr
 	Kore::Graphics4::setTexture3DMinificationFilter(*u, (Kore::Graphics4::TextureFilter)minificationFilter);
 	Kore::Graphics4::setTexture3DMagnificationFilter(*u, (Kore::Graphics4::TextureFilter)magnificationFilter);
 	Kore::Graphics4::setTexture3DMipmapFilter(*u, (Kore::Graphics4::MipmapFilter)mipmapFilter);
+}
+
+extern "C" void hl_kore_graphics_set_texture_compare_mode(vbyte *unit, bool enabled) {
+	Kore::Graphics4::TextureUnit* u = (Kore::Graphics4::TextureUnit*)unit;
+	Kore::Graphics4::setTextureCompareMode(*u, enabled);
+}
+
+extern "C" void hl_kore_graphics_set_cube_map_compare_mode(vbyte *unit, bool enabled) {
+	Kore::Graphics4::TextureUnit* u = (Kore::Graphics4::TextureUnit*)unit;
+	Kore::Graphics4::setCubeMapCompareMode(*u, enabled);
 }
 
 extern "C" void hl_kore_graphics_set_texture(vbyte *unit, vbyte *texture) {
@@ -125,6 +135,26 @@ extern "C" void hl_kore_graphics_set_bool(vbyte *location, bool value) {
 extern "C" void hl_kore_graphics_set_int(vbyte *location, int value) {
 	Kore::Graphics4::ConstantLocation* loc = (Kore::Graphics4::ConstantLocation*)location;
 	Kore::Graphics4::setInt(*loc, value);
+}
+
+extern "C" void hl_kore_graphics_set_int2(vbyte *location, int value1, int value2) {
+	Kore::Graphics4::ConstantLocation* loc = (Kore::Graphics4::ConstantLocation*)location;
+	Kore::Graphics4::setInt2(*loc, value1, value2);
+}
+
+extern "C" void hl_kore_graphics_set_int3(vbyte *location, int value1, int value2, int value3) {
+	Kore::Graphics4::ConstantLocation* loc = (Kore::Graphics4::ConstantLocation*)location;
+	Kore::Graphics4::setInt3(*loc, value1, value2, value3);
+}
+
+extern "C" void hl_kore_graphics_set_int4(vbyte *location, int value1, int value2, int value3, int value4) {
+	Kore::Graphics4::ConstantLocation* loc = (Kore::Graphics4::ConstantLocation*)location;
+	Kore::Graphics4::setInt4(*loc, value1, value2, value3, value4);
+}
+
+extern "C" void hl_kore_graphics_set_ints(vbyte *location, vbyte *values, int count) {
+	Kore::Graphics4::ConstantLocation* loc = (Kore::Graphics4::ConstantLocation*)location;
+	Kore::Graphics4::setInts(*loc, (int*)values, count);
 }
 
 extern "C" void hl_kore_graphics_set_float(vbyte *location, float value) {

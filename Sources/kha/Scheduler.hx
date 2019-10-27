@@ -87,8 +87,8 @@ class Scheduler {
 	}
 	
 	public static function start(restartTimers : Bool = false): Void {
-		vsync = System.vsync;
-		var hz = System.refreshRate;
+		vsync = Window.get(0).vSynced;
+		var hz = Display.primary.frequency;
 		if (hz >= 57 && hz <= 63) hz = 60;
 		onedifhz = 1.0 / hz;
 
@@ -177,7 +177,7 @@ class Scheduler {
 		var frameEnd: Float = current;
 		
 		if (delta >= 0) {
-			if (kha.network.Session.the() == null) {
+			if (kha.netsync.Session.the() == null) {
 				//tdif = 1.0 / 60.0; //force fixed frame rate
 				
 				if (delta > maxframetime) {

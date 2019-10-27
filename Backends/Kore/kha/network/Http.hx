@@ -27,37 +27,26 @@ class Http {
 	private static var callbacks: Array<Int->Int->String->Void>;
 
 	@:functionCode('
-		Kore::httpRequest(url, path, data, port, secure, (Kore::HttpMethod)method, internalCallback, (void*)callbackindex);
+		Kore::httpRequest(url, path, data, port, secure, (Kore::HttpMethod)method, header, internalCallback, (void*)callbackindex);
 	')
-	private static function request2(url: String, path: String, data: String, port: Int, secure: Bool, method: Int, callbackindex: Int): Void {
+	private static function request2(url: String, path: String, data: String, port: Int, secure: Bool, method: Int, header: String, callbackindex: Int): Void {
 
 	}
 
 	private static function internalCallback2(error: Int, response: Int, body: String, callbackindex: Int): Void {
 		callbacks[callbackindex](error, response, body);
 	}
-	
-	private static function convertMethod(method: HttpMethod): Int {
-		switch (method) {
-			case Get:
-				return 0;
-			case Post:
-				return 1;
-			case Put:
-				return 2;
-			case Delete:
-				return 3;
-			default:
-				return 0;
-		}
-	}
-	
-	public static function request(url: String, path: String, data: String, port: Int, secure: Bool, method: HttpMethod, contentType: String, callback: Int->Int->String->Void /*error, response, body*/): Void {
+
+	public static function request(url: String, path: String, data: String, port: Int, secure: Bool, method: HttpMethod, headers: Map<String, String>, callback: Int->Int->String->Void /*error, response, body*/): Void {
 		if (callbacks == null) {
 			callbacks = new Array<Int->Int->String->Void>();
 		}
 		var index = callbacks.length;
 		callbacks.push(callback);
-		request2(url, path, data, port, secure, convertMethod(method), index);
+		var header = "";
+		for (key in headers.keys()) {
+			header += key + ": " + headers[key] + "\r\n";
+		}
+		request2(url, path, data, port, secure, method, header, index);
 	}
 }

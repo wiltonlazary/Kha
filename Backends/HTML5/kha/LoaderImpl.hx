@@ -1,18 +1,12 @@
 package kha;
 
-import js.Boot;
 import js.Browser;
-import js.html.audio.DynamicsCompressorNode;
 import js.html.ImageElement;
-import js.Lib;
 import js.html.XMLHttpRequest;
 import haxe.io.Bytes;
-import haxe.io.BytesData;
-import kha.FontStyle;
 import kha.Blob;
 import kha.js.WebAudioSound;
 import kha.js.MobileWebAudioSound;
-import kha.Kravur;
 import kha.graphics4.TextureFormat;
 import kha.graphics4.Usage;
 
@@ -46,6 +40,7 @@ class LoaderImpl {
 		#if !kha_debug_html5
 		if (element.canPlayType("audio/mp4") != "") formats.push("mp4");
 		if (element.canPlayType("audio/mp3") != "") formats.push("mp3");
+		if (element.canPlayType("audio/wav") != "") formats.push("wav");
 		#end
 		if (SystemImpl._hasWebAudio || element.canPlayType("audio/ogg") != "") formats.push("ogg");
 		return formats;
@@ -53,8 +48,8 @@ class LoaderImpl {
 
 	public static function loadSoundFromDescription(desc: Dynamic, done: kha.Sound -> Void, failed: AssetError -> Void) {
 		if (SystemImpl._hasWebAudio) {
-			var element = Browser.document.createAudioElement();
 			#if !kha_debug_html5
+			var element = Browser.document.createAudioElement();
 			if (element.canPlayType("audio/mp4") != "") {
 				for (i in 0...desc.files.length) {
 					var file: String = desc.files[i];
@@ -68,6 +63,15 @@ class LoaderImpl {
 				for (i in 0...desc.files.length) {
 					var file: String = desc.files[i];
 					if (file.endsWith(".mp3")) {
+						new WebAudioSound(file, done, failed);
+						return;
+					}
+				}
+			}
+			if (element.canPlayType("audio/wav") != "") {
+				for (i in 0...desc.files.length) {
+					var file: String = desc.files[i];
+					if (file.endsWith(".wav")) {
 						new WebAudioSound(file, done, failed);
 						return;
 					}
@@ -97,6 +101,15 @@ class LoaderImpl {
 				for (i in 0...desc.files.length) {
 					var file: String = desc.files[i];
 					if (file.endsWith(".mp3")) {
+						new MobileWebAudioSound(file, done, failed);
+						return;
+					}
+				}
+			}
+			if (element.canPlayType("audio/wav") != "") {
+				for (i in 0...desc.files.length) {
+					var file: String = desc.files[i];
+					if (file.endsWith(".wav")) {
 						new MobileWebAudioSound(file, done, failed);
 						return;
 					}
@@ -169,8 +182,8 @@ class LoaderImpl {
 			loadRemote(desc, done, failed);
 		}
 		else {
-			var fs = untyped __js__("require('fs')");
-			var path = untyped __js__("require('path')");
+			var fs = untyped __js__("require('electron').remote.require('fs')");
+			var path = untyped __js__("require('electron').remote.require('path')");
 			var app = untyped __js__("require('electron').remote.require('electron').app");
 			var url = if (path.isAbsolute(desc.files[0])) desc.files[0] else path.join(app.getAppPath(), desc.files[0]);
 			fs.readFile(url, function (err, data) {

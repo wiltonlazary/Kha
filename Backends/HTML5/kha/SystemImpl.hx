@@ -8,13 +8,17 @@ import js.html.KeyboardEvent;
 import js.html.MouseEvent;
 import js.html.Touch;
 import js.html.TouchEvent;
+import js.html.ClipboardEvent;
+import js.html.DeviceMotionEvent;
+import js.html.DeviceOrientationEvent;
 import kha.graphics4.TextureFormat;
 import kha.input.Gamepad;
 import kha.input.Keyboard;
+import kha.input.KeyCode;
 import kha.input.Mouse;
+import kha.input.Sensor;
 import kha.input.Surface;
 import kha.js.AudioElementAudio;
-import kha.js.AEAudioChannel;
 import kha.js.CanvasGraphics;
 import kha.js.MobileWebAudio;
 import kha.js.vr.VrInterface;
@@ -49,23 +53,29 @@ class SystemImpl {
 	private static var firefox: Bool = false;
 	private static var ie: Bool = false;
 	public static var insideInputEvent: Bool = false;
+	static var window: Window;
 
 	private static function errorHandler(message: String, source: String, lineno: Int, colno: Int, error: Dynamic) {
 		Browser.console.error(error.stack);
 		return true;
 	}
 
-	public static function init(options: SystemOptions, callback: Void -> Void) {
+	public static function init(options: SystemOptions, callback: Window -> Void): Void {
 		SystemImpl.options = options;
 		#if kha_debug_html5
 		Browser.window.onerror = cast errorHandler;
 		var electron = untyped __js__("require('electron')");
-		electron.webFrame.setZoomLevelLimits(1, 1);
-		electron.ipcRenderer.send('asynchronous-message', {type: 'showWindow', title: options.title, width: options.width, height: options.height});
-		// Wait a second so the debugger can attach
+		if (electron.webFrame.setZoomLevelLimits != null) { // TODO: Figure out why this check is sometimes required
+			electron.webFrame.setZoomLevelLimits(1, 1);
+		}
+		var wndOpts = {
+			type: 'showWindow', title: options.title,
+			x: options.window.x, y: options.window.y,
+			width: options.width, height: options.height,
+		}
+		electron.ipcRenderer.send('asynchronous-message', wndOpts);		// Wait a second so the debugger can attach
 		Browser.window.setTimeout(function () {
-			init2();
-			callback();
+			initSecondStep(callback);
 		}, 1000);
 		#else
 		mobile = isMobile();
@@ -73,19 +83,37 @@ class SystemImpl {
 		chrome = isChrome();
 		firefox = isFirefox();
 		ie = isIE();
-		init2();
-		callback();
+
+		if (mobile || chrome) {
+			mobileAudioPlaying = false;
+		}
+		else {
+			mobileAudioPlaying = true;
+		}
+
+		initSecondStep(callback);
 		#end
 	}
 
-	public static function initEx(title: String, options: Array<WindowOptions>, windowCallback: Int -> Void, callback: Void -> Void) {
-		trace('initEx is not supported on the html5 target, running init() with first window options');
+	private static function initSecondStep(callback: Window -> Void): Void {
+		init2(options.window.width, options.window.height);
+		callback(window);
+	}
 
-		init({title : title, width : options[0].width, height : options[0].height}, callback);
-
-		if (windowCallback != null) {
-			windowCallback(0);
+	public static function initSensor(): Void {
+		if (ios) { // In Safari for iOS the directions are reversed on axes x, y and z
+			Browser.window.ondevicemotion = function (event: DeviceMotionEvent) {
+				Sensor._changed(0, -event.accelerationIncludingGravity.x, -event.accelerationIncludingGravity.y, -event.accelerationIncludingGravity.z);
+			};
 		}
+		else {
+			Browser.window.ondevicemotion = function (event: DeviceMotionEvent) {
+				Sensor._changed(0, event.accelerationIncludingGravity.x, event.accelerationIncludingGravity.y, event.accelerationIncludingGravity.z);
+			};
+		}
+		Browser.window.ondeviceorientation = function (event: DeviceOrientationEvent) {
+			Sensor._changed(1, event.beta, event.gamma, event.alpha);
+		};
 	}
 
 	private static function isMobile(): Bool {
@@ -135,27 +163,6 @@ class SystemImpl {
 		return false;
 	}
 
-	public static function windowWidth(windowId: Int = 0): Int {
-		return (khanvas.width == 0 && options.width != null) ? options.width : khanvas.width;
-	}
-
-	public static function windowHeight(windowId: Int = 0): Int {
-		return (khanvas.height == 0 && options.height != null) ? options.height : khanvas.height;
-	}
-
-	public static function screenDpi(): Int {
-		var dpiElement = Browser.document.createElement('div');
-		dpiElement.style.position = "absolute";
-		dpiElement.style.width = "1in";
-		dpiElement.style.height = "1in";
-		dpiElement.style.left = "-100%";
-		dpiElement.style.top = "-100%";
-		Browser.document.body.appendChild(dpiElement);
-		var dpi:Int = dpiElement.offsetHeight;
-		dpiElement.remove();
-		return dpi;
-	}
-
 	public static function setCanvas(canvas: CanvasElement): Void {
 		khanvas = canvas;
 	}
@@ -169,26 +176,27 @@ class SystemImpl {
 		return performance.now() / 1000;
 	}
 
-	public static function getVsync(): Bool {
-		return true;
-	}
-
-	public static function getRefreshRate(): Int {
-		return 60;
-	}
-
 	public static function getSystemId(): String {
 		return "HTML5";
 	}
 
-	public static function requestShutdown(): Void {
+	public static function vibrate(ms:Int): Void {
+		Browser.navigator.vibrate(ms);
+	}
+
+	public static function getLanguage(): String {
+		final lang = Browser.navigator.language;
+		return lang.substr(0, 2).toLowerCase();
+	}
+
+	public static function requestShutdown(): Bool {
 		Browser.window.close();
+		return true;
 	}
 
 	private static inline var maxGamepads: Int = 4;
 	private static var frame: Framebuffer;
 	private static var pressedKeys: Array<Bool>;
-	private static var leftMouseCtrlDown: Bool = false;
 	private static var keyboard: Keyboard = null;
 	private static var mouse: kha.input.Mouse;
 	private static var surface: Surface;
@@ -203,10 +211,8 @@ class SystemImpl {
 	private static var lastFirstTouchX: Int = 0;
 	private static var lastFirstTouchY: Int = 0;
 
-	public static function init2(?backbufferFormat: TextureFormat) {
-		haxe.Log.trace = untyped js.Boot.__trace; // Hack for JS trace problems
-		
-		#if !kha_no_keyboard 
+	public static function init2(defaultWidth: Int, defaultHeight: Int, ?backbufferFormat: TextureFormat) {
+		#if !kha_no_keyboard
 		keyboard = new Keyboard();
 		#end
 		mouse = new kha.input.MouseImpl();
@@ -217,11 +223,11 @@ class SystemImpl {
 			gamepads[i] = new Gamepad(i);
 			gamepadStates[i] = new GamepadStates();
 		}
-		js.Browser.window.addEventListener("gamepadconnected", function(e_) {
-			Gamepad.sendConnectEvent(e_.gamepad.index);
-		}); 
-		js.Browser.window.addEventListener("gamepaddisconnected", function(e_) {
-			Gamepad.sendDisconnectEvent(e_.gamepad.index);
+		js.Browser.window.addEventListener("gamepadconnected", function(e) {
+			Gamepad.sendConnectEvent(e.gamepad.index);
+		});
+		js.Browser.window.addEventListener("gamepaddisconnected", function(e) {
+			Gamepad.sendDisconnectEvent(e.gamepad.index);
 		});
 		if (ie) {
 			pressedKeys = new Array<Bool>();
@@ -229,41 +235,38 @@ class SystemImpl {
 			for (i in 0...256) pressedKeys.push(null);
 		}
 
-		js.Browser.document.addEventListener("copy", function (e_) {
-			var e: js.html.ClipboardEvent = cast e_;
+		function onCopy(e: ClipboardEvent):Void {
 			if (System.copyListener != null) {
 				var data = System.copyListener();
-				if (data != null) {
-					e.clipboardData.setData("text/plain", data);
-				}
+				if (data != null) e.clipboardData.setData("text/plain", data);
 				e.preventDefault();
 			}
-		});
+		}
 
-		js.Browser.document.addEventListener("cut", function (e_) {
-			var e: js.html.ClipboardEvent = cast e_;
+		function onCut(e: ClipboardEvent):Void {
 			if (System.cutListener != null) {
 				var data = System.cutListener();
-				if (data != null) {
-					e.clipboardData.setData("text/plain", data);
-				}
+				if (data != null) e.clipboardData.setData("text/plain", data);
 				e.preventDefault();
 			}
-		});
+		}
 
-		js.Browser.document.addEventListener("paste", function (e_) {
-			var e: js.html.ClipboardEvent = cast e_;
+		function onPaste(e: ClipboardEvent):Void {
 			if (System.pasteListener != null) {
 				System.pasteListener(e.clipboardData.getData("text/plain"));
 				e.preventDefault();
 			}
-		});
+		}
+
+		var document = Browser.document;
+		document.addEventListener("copy", onCopy);
+		document.addEventListener("cut", onCut);
+		document.addEventListener("paste", onPaste);
 
 		CanvasImage.init();
-		//Loader.init(new kha.js.Loader());
 		Scheduler.init();
 
-		loadFinished();
+		loadFinished(defaultWidth, defaultHeight);
 	}
 
 	public static function getMouse(num: Int): Mouse {
@@ -279,9 +282,8 @@ class SystemImpl {
 	static function checkGamepad(pad: js.html.Gamepad) {
 		for (i in 0...pad.axes.length) {
 			if (pad.axes[i] != null) {
-				if (gamepadStates[pad.index].axes[i] != pad.axes[i]) {
-					var axis = pad.axes[i];
-					if (i % 2 == 1) axis = -axis;
+				var axis = pad.axes[i];
+				if (gamepadStates[pad.index].axes[i] != axis) {
 					gamepadStates[pad.index].axes[i] = axis;
 					gamepads[pad.index].sendAxisEvent(i, axis);
 				}
@@ -304,30 +306,25 @@ class SystemImpl {
 		}
 	}
 
-	//public function start(game: Game): Void {
-	//	gameToStart = game;
-	//	Configuration.setScreen(new EmptyScreen(Color.fromBytes(0, 0, 0)));
-	//	Loader.the.loadProject(loadFinished);
-	//}
-
-	private static function loadFinished() {
+	private static function getCanvasElement(): CanvasElement {
+		if (khanvas != null) return khanvas;
 		// Only consider custom canvas ID for release builds
-		var canvas: Dynamic = khanvas;
-		if (canvas == null) {
-			#if (kha_debug_html5 || !canvas_id)
-			canvas = Browser.document.getElementById("khanvas");
-			#else
-			canvas = Browser.document.getElementById(kha.CompilerDefines.canvas_id);
-			#end
-		}
+		#if (kha_debug_html5 || !canvas_id)
+		return cast Browser.document.getElementById("khanvas");
+		#else
+		return cast Browser.document.getElementById(Macros.canvasId());
+		#end
+	}
+
+	private static function loadFinished(defaultWidth: Int, defaultHeight: Int) {
+		var canvas: CanvasElement = getCanvasElement();
 		canvas.style.cursor = "default";
 
 		var gl: Bool = false;
 
 		#if kha_webgl
 		try {
-			
-			SystemImpl.gl = canvas.getContext("webgl2", { alpha: false, antialias: options.samplesPerPixel > 1, stencil: true}); // preserveDrawingBuffer: true } ); WARNING: preserveDrawingBuffer causes huge performance issues (on mobile browser)!
+			SystemImpl.gl = canvas.getContext("webgl2", { alpha: false, antialias: options.framebuffer.samplesPerPixel > 1, stencil: true}); // preserveDrawingBuffer: true } ); Warning: preserveDrawingBuffer can cause huge performance issues on mobile browsers
 			SystemImpl.gl.pixelStorei(GL.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
 
 			halfFloat = {HALF_FLOAT_OES: 0x140B}; // GL_HALF_FLOAT
@@ -339,7 +336,7 @@ class SystemImpl {
 			SystemImpl.gl.getExtension("OES_texture_half_float_linear");
 			anisotropicFilter = SystemImpl.gl.getExtension("EXT_texture_filter_anisotropic");
 			if (anisotropicFilter == null) anisotropicFilter = SystemImpl.gl.getExtension("WEBKIT_EXT_texture_filter_anisotropic");
-			
+
 			gl = true;
 			gl2 = true;
 			Shaders.init();
@@ -350,31 +347,31 @@ class SystemImpl {
 
 		if (!gl2) {
 			try {
-				SystemImpl.gl = canvas.getContext("experimental-webgl", { alpha: false, antialias: options.samplesPerPixel > 1, stencil: true}); // preserveDrawingBuffer: true } ); WARNING: preserveDrawingBuffer causes huge performance issues (on mobile browser)!
-				if (SystemImpl.gl != null) {
-					SystemImpl.gl.pixelStorei(GL.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
-					SystemImpl.gl.getExtension("OES_texture_float");
-					SystemImpl.gl.getExtension("OES_texture_float_linear");
-					halfFloat = SystemImpl.gl.getExtension("OES_texture_half_float");
-					SystemImpl.gl.getExtension("OES_texture_half_float_linear");
-					depthTexture = SystemImpl.gl.getExtension("WEBGL_depth_texture");
-					SystemImpl.gl.getExtension("EXT_shader_texture_lod");
-					SystemImpl.gl.getExtension("OES_standard_derivatives");
-					anisotropicFilter = SystemImpl.gl.getExtension("EXT_texture_filter_anisotropic");
-					if (anisotropicFilter == null) anisotropicFilter = SystemImpl.gl.getExtension("WEBKIT_EXT_texture_filter_anisotropic");
-					drawBuffers = SystemImpl.gl.getExtension('WEBGL_draw_buffers');
-					elementIndexUint = SystemImpl.gl.getExtension("OES_element_index_uint");
-					gl = true;
-					Shaders.init();
-				}
+				SystemImpl.gl = canvas.getContext("experimental-webgl", { alpha: false, antialias: options.framebuffer.samplesPerPixel > 1, stencil: true}); // preserveDrawingBuffer: true } ); WARNING: preserveDrawingBuffer causes huge performance issues (on mobile browser)!
+				SystemImpl.gl.pixelStorei(GL.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
+				SystemImpl.gl.getExtension("OES_texture_float");
+				SystemImpl.gl.getExtension("OES_texture_float_linear");
+				halfFloat = SystemImpl.gl.getExtension("OES_texture_half_float");
+				SystemImpl.gl.getExtension("OES_texture_half_float_linear");
+				depthTexture = SystemImpl.gl.getExtension("WEBGL_depth_texture");
+				SystemImpl.gl.getExtension("EXT_shader_texture_lod");
+				SystemImpl.gl.getExtension("OES_standard_derivatives");
+				anisotropicFilter = SystemImpl.gl.getExtension("EXT_texture_filter_anisotropic");
+				if (anisotropicFilter == null) anisotropicFilter = SystemImpl.gl.getExtension("WEBKIT_EXT_texture_filter_anisotropic");
+				drawBuffers = SystemImpl.gl.getExtension('WEBGL_draw_buffers');
+				elementIndexUint = SystemImpl.gl.getExtension("OES_element_index_uint");
+				gl = true;
+				Shaders.init();
 			}
 			catch (e: Dynamic) {
-				trace("Could not initialize WebGL, falling back to Canvas.");
+				trace("Could not initialize WebGL, falling back to <canvas>.");
 			}
 		}
 		#end
 
 		setCanvas(canvas);
+		window = new Window(defaultWidth, defaultHeight, canvas);
+
 		//var widthTransform: Float = canvas.width / Loader.the.width;
 		//var heightTransform: Float = canvas.height / Loader.the.height;
 		//var transform: Float = Math.min(widthTransform, heightTransform);
@@ -402,12 +399,11 @@ class SystemImpl {
 		}
 		else {
 			SystemImpl._hasWebAudio = false;
-			AudioElementAudio._compile();
 			untyped __js__ ("kha_audio2_Audio1 = kha_js_AudioElementAudio");
 		}
-		
+
 		kha.vr.VrInterface.instance = new VrInterface();
-		
+
 		Scheduler.start();
 
 		var window: Dynamic = Browser.window;
@@ -433,7 +429,7 @@ class SystemImpl {
 
 			Scheduler.executeFrame();
 
-			if (untyped canvas.getContext) {
+			if (canvas.getContext != null) {
 
 				// Lookup the size the browser is displaying the canvas.
 				//TODO deal with window.devicePixelRatio ?
@@ -449,7 +445,7 @@ class SystemImpl {
 					canvas.height = displayHeight;
 				}
 
-				System.render(0, frame);
+				System.render([frame]);
 				if (SystemImpl.gl != null) {
 					// Clear alpha for IE11
 					SystemImpl.gl.clearColor(1, 1, 1, 1);
@@ -464,16 +460,14 @@ class SystemImpl {
 		else requestAnimationFrame(animate);
 
 		// Autofocus
-		if (canvas.getAttribute("tabindex") == null) {
-			canvas.setAttribute("tabindex", "0"); // needed for keypress events
-		}
 		canvas.focus();
 
-		// disable context menu
+		#if kha_disable_context_menu
 		canvas.oncontextmenu = function (event: Dynamic) {
 			event.stopPropagation();
 			event.preventDefault();
 		}
+		#end
 
 		canvas.onmousedown = mouseDown;
 		canvas.onmousemove = mouseMove;
@@ -493,7 +487,27 @@ class SystemImpl {
 		canvas.addEventListener("touchmove", touchMove, false);
 		canvas.addEventListener("touchcancel", touchCancel, false);
 
-		Browser.window.addEventListener("unload", unload);
+#if kha_debug_html5
+		Browser.document.addEventListener('dragover', function( event ) {
+			event.preventDefault();
+		});
+
+		Browser.document.addEventListener('drop', function( event: js.html.DragEvent ) {
+			event.preventDefault();
+
+			if (event.dataTransfer != null && event.dataTransfer.files != null) {
+				for (file in event.dataTransfer.files) {
+					// https://developer.mozilla.org/en-US/docs/Web/API/File
+					//  - use mozFullPath or webkitRelativePath?
+					System.dropFiles(untyped __js__('file.path'));
+				}
+			}
+		});
+#end
+
+		Browser.window.addEventListener("unload", function () {
+			System.shutdown();
+		});
 	}
 
 	public static function lockMouse(): Void {
@@ -552,12 +566,6 @@ class SystemImpl {
 		js.Browser.document.removeEventListener('webkitpointerlockerror', error, false);
 	}
 
-	static function unload(_): Void {
-		//Game.the.onPause();
-		//Game.the.onBackground();
-		//Game.the.onShutdown();
-	}
-
 	private static function setMouseXY(event: MouseEvent): Void {
 		var rect = SystemImpl.khanvas.getBoundingClientRect();
 		var borderWidth = SystemImpl.khanvas.clientLeft;
@@ -570,7 +578,7 @@ class SystemImpl {
 
 	private static function unlockiOSSound(): Void {
 		if (!ios || iosSoundEnabled) return;
-		
+
 		var buffer = MobileWebAudio._context.createBuffer(1, 1, 22050);
 		var source = MobileWebAudio._context.createBufferSource();
 		source.buffer = buffer;
@@ -585,10 +593,22 @@ class SystemImpl {
 	static var soundEnabled = false;
 
 	static function unlockSound(): Void {
-		if (!soundEnabled && kha.audio2.Audio._context != null) {
-			kha.audio2.Audio._context.resume().then(function (c) {
-				soundEnabled = true;
-			});
+		if (!soundEnabled) {
+			var context = kha.audio2.Audio._context;
+
+			if (context == null) {
+				context = untyped __js__('kha_audio2_Audio1._context');
+			}
+
+			if (context != null) {
+				context.resume().then(function(c) {
+					soundEnabled = true;
+				}).catchError(function(err) {
+					trace(err);
+				});
+			}
+
+			kha.audio2.Audio.wakeChannels();
 		}
 		unlockiOSSound();
 	}
@@ -596,10 +616,10 @@ class SystemImpl {
 	private static function mouseLeave():Void {
 		mouse.sendLeaveEvent(0);
 	}
-	
+
 	private static function mouseWheel(event: WheelEvent): Bool {
-		insideInputEvent = true;
 		unlockSound();
+		insideInputEvent = true;
 
 		event.preventDefault();
 
@@ -632,14 +652,7 @@ class SystemImpl {
 
 		setMouseXY(event);
 		if (event.which == 1) { //left button
-			if (event.ctrlKey) {
-				leftMouseCtrlDown = true;
-				mouse.sendDownEvent(0, 1, mouseX, mouseY);
-			}
-			else {
-				leftMouseCtrlDown = false;
-				mouse.sendDownEvent(0, 0, mouseX, mouseY);
-			}
+			mouse.sendDownEvent(0, 0, mouseX, mouseY);
 
 			if (khanvas.setCapture != null)  {
 				khanvas.setCapture();
@@ -662,9 +675,9 @@ class SystemImpl {
 
 	private static function mouseLeftUp(event: MouseEvent): Void {
 		unlockSound();
-	
+
 		if (event.which != 1) return;
-		
+
 		insideInputEvent = true;
 		khanvas.ownerDocument.removeEventListener('mouseup', mouseLeftUp);
 		if (khanvas.releaseCapture != null) {
@@ -673,13 +686,9 @@ class SystemImpl {
 		else {
 			khanvas.ownerDocument.removeEventListener("mousemove", documentMouseMove, true);
 		}
-		if (leftMouseCtrlDown) {
-			mouse.sendUpEvent(0, 1, mouseX, mouseY);
-		}
-		else {
-			mouse.sendUpEvent(0, 0, mouseX, mouseY);
-		}
-		leftMouseCtrlDown = false;
+
+		mouse.sendUpEvent(0, 0, mouseX, mouseY);
+
 		insideInputEvent = false;
 	}
 
@@ -687,7 +696,7 @@ class SystemImpl {
 		unlockSound();
 
 		if (event.which != 2) return;
-		
+
 		insideInputEvent = true;
 		khanvas.ownerDocument.removeEventListener('mouseup', mouseMiddleUp);
 		mouse.sendUpEvent(0, 2, mouseX, mouseY);
@@ -698,7 +707,7 @@ class SystemImpl {
 		unlockSound();
 
 		if (event.which != 3) return;
-		
+
 		insideInputEvent = true;
 		khanvas.ownerDocument.removeEventListener('mouseup', mouseRightUp);
 		mouse.sendUpEvent(0, 1, mouseX, mouseY);
@@ -709,10 +718,9 @@ class SystemImpl {
 		event.stopPropagation();
 		mouseMove(event);
 	}
-	
+
 	private static function mouseMove(event: MouseEvent): Void {
 		insideInputEvent = true;
-		unlockSound();
 
 		var lastMouseX = mouseX;
 		var lastMouseY = mouseY;
@@ -753,6 +761,7 @@ class SystemImpl {
 		event.stopPropagation();
 		event.preventDefault();
 
+		var index = 0;
 		for (touch in event.changedTouches)	{
 			var id = touch.identifier;
 			if (ios) {
@@ -764,6 +773,11 @@ class SystemImpl {
 			setTouchXY(touch);
 			mouse.sendDownEvent(0, 0, touchX, touchY);
 			surface.sendTouchStartEvent(id, touchX, touchY);
+			if (index == 0) {
+				lastFirstTouchX = touchX;
+				lastFirstTouchY = touchY;
+			}
+			index++;
 		}
 		insideInputEvent = false;
 	}
@@ -793,7 +807,7 @@ class SystemImpl {
 		var index = 0;
 		for (touch in event.changedTouches) {
 			setTouchXY(touch);
-			if(index == 0){
+			if (index == 0) {
 				var movementX = touchX - lastFirstTouchX;
 				var movementY = touchY - lastFirstTouchY;
 				lastFirstTouchX = touchX;
@@ -925,8 +939,18 @@ class SystemImpl {
 	}
 
 	private static function keyDown(event: KeyboardEvent): Void {
-		if ((event.keyCode < 112 || event.keyCode > 123) //F1-F12
-			&& (event.key != null && event.key.length != 1)) event.preventDefault();
+		insideInputEvent = true;
+		unlockSound();
+
+		switch (Keyboard.keyBehavior) {
+			case Default:
+				defaultKeyBlock(event);
+			case Full:
+				event.preventDefault();
+			case Custom(func):
+				if (func(cast event.keyCode)) event.preventDefault();
+			case None:
+		}
 		event.stopPropagation();
 
 		// prevent key repeat
@@ -941,24 +965,62 @@ class SystemImpl {
 			event.preventDefault();
 			return;
 		}
+		var keyCode = fixedKeyCode(event);
+		keyboard.sendDownEvent(keyCode);
+		insideInputEvent = false;
+	}
 
-		keyboard.sendDownEvent(cast event.keyCode);
+	static function fixedKeyCode(event: KeyboardEvent): KeyCode {
+		return switch (event.keyCode) {
+			case 91, 93: Meta; // left/right in Chrome
+			case 186: Semicolon;
+			case 187: Equals;
+			case 189: HyphenMinus;
+			default:
+				cast event.keyCode;
+		}
+	}
+
+	static function defaultKeyBlock(e: KeyboardEvent):Void {
+		// block if ctrl key pressed
+		if (e.ctrlKey || e.metaKey) {
+			// except for cut-copy-paste
+			if (e.keyCode == 67 || e.keyCode == 88 || e.keyCode == 86) return;
+			e.preventDefault();
+			return;
+		}
+		// allow F-keys
+		if (e.keyCode >= 112 && e.keyCode <= 123) return;
+		// allow char keys
+		if (e.key == null || e.key.length == 1) return;
+		e.preventDefault();
 	}
 
 	private static function keyUp(event: KeyboardEvent): Void {
+		insideInputEvent = true;
+		unlockSound();
+
 		event.preventDefault();
 		event.stopPropagation();
 
 		if (ie) pressedKeys[event.keyCode] = false;
 
-		keyboard.sendUpEvent(cast event.keyCode);
+		var keyCode = fixedKeyCode(event);
+		keyboard.sendUpEvent(keyCode);
+
+		insideInputEvent = false;
 	}
 
 	private static function keyPress(event: KeyboardEvent): Void {
+		insideInputEvent = true;
+		unlockSound();
+
 		if (event.which == 0) return; //for Firefox and Safari
 		event.preventDefault();
 		event.stopPropagation();
 		keyboard.sendPressEvent(String.fromCharCode(event.which));
+
+		insideInputEvent = false;
 	}
 
 	public static function canSwitchFullscreen(): Bool {
@@ -967,43 +1029,6 @@ class SystemImpl {
 		'webkitFullscreenElement' in document ||
 		'msFullscreenElement' in document
 		");
-	}
-
-	public static function isFullscreen(): Bool {
-		return untyped __js__("document.fullscreenElement === this.khanvas ||
-			document.mozFullScreenElement === this.khanvas ||
-			document.webkitFullscreenElement === this.khanvas ||
-			document.msFullscreenElement === this.khanvas ");
-	}
-
-	public static function requestFullscreen(): Void {
-		untyped if (khanvas.requestFullscreen) {
-			khanvas.requestFullscreen();
-		}
-		else if (khanvas.msRequestFullscreen) {
-			khanvas.msRequestFullscreen();
-		}
-		else if (khanvas.mozRequestFullScreen) {
-			khanvas.mozRequestFullScreen();
-		}
-		else if(khanvas.webkitRequestFullscreen){
-			khanvas.webkitRequestFullscreen();
-		}
-	}
-
-	public static function exitFullscreen(): Void {
-		untyped if (document.exitFullscreen) {
-			document.exitFullscreen();
-		}
-		else if (document.msExitFullscreen) {
-			document.msExitFullscreen();
-		}
-		else if (document.mozCancelFullScreen) {
-			document.mozCancelFullScreen();
-		}
-		else if (document.webkitExitFullscreen) {
-			document.webkitExitFullscreen();
-		}
 	}
 
 	public static function notifyOfFullscreenChange(func: Void -> Void, error: Void -> Void): Void {
@@ -1030,10 +1055,6 @@ class SystemImpl {
 		js.Browser.document.removeEventListener('MSFullscreenError', error, false);
 	}
 
-	public static function changeResolution(width: Int, height: Int): Void {
-
-	}
-
 	public static function setKeepScreenOn(on: Bool): Void {
 
 	}
@@ -1047,7 +1068,7 @@ class SystemImpl {
 		if (sysGamepads != null &&  untyped sysGamepads[index]) {
 				return sysGamepads[index].id;
 		}
-	
+
 		return "unkown";
 	}
 
@@ -1064,5 +1085,25 @@ class SystemImpl {
 
 	public static function getPen(num: Int): kha.input.Pen {
 		return null;
+	}
+
+	public static function safeZone(): Float {
+		return 1.0;
+	}
+
+	public static function login(): Void {
+
+	}
+
+	public static function automaticSafeZone(): Bool {
+		return true;
+	}
+
+	public static function setSafeZone(value: Float): Void {
+
+	}
+
+	public static function unlockAchievement(id: Int): Void {
+
 	}
 }

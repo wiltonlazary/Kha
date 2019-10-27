@@ -18,14 +18,14 @@ class FastMatrix4 {
 		this._02 = _02; this._12 = _12; this._22 = _22; this._32 = _32;
 		this._03 = _03; this._13 = _13; this._23 = _23; this._33 = _33;
 	}
-	
-	public static function fromMatrix4(m: Matrix4): FastMatrix4 {
+
+	public static inline function fromMatrix4(m: Matrix4): FastMatrix4 {
 		return new FastMatrix4(m._00, m._10, m._20, m._30,
 								m._01, m._11, m._21, m._31,
 								m._02, m._12, m._22, m._32,
 								m._03, m._13, m._23, m._33);
 	}
-	
+
 	@:extern public inline function setFrom(m: FastMatrix4): Void {
 		this._00 = m._00; this._10 = m._10; this._20 = m._20; this._30 = m._30;
 		this._01 = m._01; this._11 = m._11; this._21 = m._21; this._31 = m._31;
@@ -117,20 +117,20 @@ class FastMatrix4 {
 		);
 	}
 
-	// Inlining this leads to weird error in C#, please investigate
-	public static function orthogonalProjection(left: FastFloat, right: FastFloat, bottom: FastFloat, top: FastFloat, zn: FastFloat, zf: FastFloat): FastMatrix4 {
+	// Inlining with `2` instead of `2.0` leads to wrong temp var type in Java/C#
+	public static inline function orthogonalProjection(left: FastFloat, right: FastFloat, bottom: FastFloat, top: FastFloat, zn: FastFloat, zf: FastFloat): FastMatrix4 {
 		var tx: FastFloat = -(right + left) / (right - left);
 		var ty: FastFloat = -(top + bottom) / (top - bottom);
 		var tz: FastFloat = -(zf + zn) / (zf - zn);
 		return new FastMatrix4(
 			2 / (right - left), 0,                  0,              tx,
-			0,                  2 / (top - bottom), 0,              ty,
+			0,                  2.0 / (top - bottom), 0,              ty,
 			0,                  0,                  -2 / (zf - zn), tz,
 			0,                  0,                  0,               1
 		);
 	}
 
-	public static function perspectiveProjection(fovY: FastFloat, aspect: FastFloat, zn: FastFloat, zf: FastFloat): FastMatrix4 {
+	public static inline function perspectiveProjection(fovY: FastFloat, aspect: FastFloat, zn: FastFloat, zf: FastFloat): FastMatrix4 {
 		var uh = 1.0 / Math.tan(fovY / 2);
 		var uw = uh / aspect;
 		return new FastMatrix4(
@@ -141,11 +141,9 @@ class FastMatrix4 {
 		);
 	}
 
-	public static function lookAt(eye: FastVector3, at: FastVector3, up: FastVector3): FastMatrix4 {
-		var zaxis = at.sub(eye);
-		zaxis.normalize();
-		var xaxis = zaxis.cross(up);
-		xaxis.normalize();
+	public static inline function lookAt(eye: FastVector3, at: FastVector3, up: FastVector3): FastMatrix4 {
+		var zaxis = at.sub(eye).normalized();
+		var xaxis = zaxis.cross(up).normalized();
 		var yaxis = xaxis.cross(zaxis);
 
 		return new FastMatrix4(

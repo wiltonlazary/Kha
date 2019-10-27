@@ -1,12 +1,16 @@
 package kha;
 
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-import com.ktxsoftware.kha.KhaActivity;
+import tech.kode.kha.KhaActivity;
 import kha.android.Graphics;
 import kha.android.Keyboard;
 import kha.graphics4.Graphics2;
 import android.view.KeyEvent;
+import android.os.Vibrator;
+// import android.os.VibrationEffect;
+import android.os.BuildVERSION;
 import kha.input.Mouse;
 import kha.input.KeyCode;
 import kha.input.Surface;
@@ -17,33 +21,6 @@ class SystemImpl {
 	public static var h: Int = 480;
 	private static var startTime: Float;
 
-	@:functionCode('
-		android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-		com.ktxsoftware.kha.KhaActivity.the().getWindowManager().getDefaultDisplay().getMetrics(metrics);
-		return metrics.widthPixels;
-	')
-	public static function windowWidth(windowId: Int = 0): Int {
-		return 0;
-	}
-
-	@:functionCode('
-		android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-		com.ktxsoftware.kha.KhaActivity.the().getWindowManager().getDefaultDisplay().getMetrics(metrics);
-		return metrics.heightPixels;
-	')
-	public static function windowHeight(windowId: Int = 0): Int {
-		return 0;
-	}
-
-	@:functionCode('
-		android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
-		com.ktxsoftware.kha.KhaActivity.the().getWindowManager().getDefaultDisplay().getMetrics(metrics);
-		return (int)(metrics.density * android.util.DisplayMetrics.DENSITY_DEFAULT);
-	')
-	public static function screenDpi(): Int {
-		return 0;
-	}
-	
 	public static function getScreenRotation(): ScreenRotation {
 		return ScreenRotation.RotationNone;
 	}
@@ -75,9 +52,29 @@ class SystemImpl {
 		return "Android";
 	}
 
-	public static function requestShutdown(): Void {
+	public static function vibrate(ms:Int): Void {
+		var instance = KhaActivity.the();
+		var v:Vibrator = cast instance.getSystemService(Context.VIBRATOR_SERVICE);
+		if (BuildVERSION.SDK_INT >= 26) { // Build.VERSION_CODES.O
+			untyped __java__("v.vibrate(
+					android.os.VibrationEffect.createOneShot(ms,
+						android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+			");
+		} else {
+			// deprecated in API 26
+			v.vibrate(ms);
+		}
+	}
+
+	public static function getLanguage(): String {
+		final lang = java.util.Locale.getDefault().getLanguage();
+		return lang.substr(0, 2).toLowerCase();
+	}
+
+	public static function requestShutdown(): Bool {
 		shutdown();
-		untyped __java__("java.lang.System.exit(0)");	
+		untyped __java__("java.lang.System.exit(0)");
+		return true;
 	}
 
 	public static function changeResolution(width: Int, height: Int): Void {
@@ -117,7 +114,7 @@ class SystemImpl {
 	private static var mouse: Mouse;
 	private static var surface: Surface;
 
-	public static function init(options: SystemOptions, done: Void->Void) {
+	public static function init(options: SystemOptions, done: Window->Void) {
 		w = options.width;
 		h = options.height;
 		KhaActivity.the();
@@ -126,6 +123,7 @@ class SystemImpl {
 		//gamepad = new Gamepad();
 		surface = new Surface();
 
+		new Window();
 		LoaderImpl.init(KhaActivity.the().getApplicationContext());
 		Scheduler.init();
 
@@ -139,19 +137,10 @@ class SystemImpl {
 		//if (kha.audio2.Audio._init()) {
 			//kha.audio2.Audio1._init();
 		//}
-		
+
 		Scheduler.start();
 
-		done();
-	}
-
-	public static function initEx( title : String, options : Array<kha.WindowOptions>, windowCallback : Int -> Void, callback : Void -> Void ) {
-		trace('initEx is not supported on android target, falling back to init() with first window options');
-		init( { title: title, width: options[0].width, height : options[0].height, samplesPerPixel : options[0].rendererOptions != null ? options[0].rendererOptions.samplesPerPixel : 0}, callback);
-
-		if (windowCallback != null) {
-			windowCallback(0);
-		}
+		done(Window.get(0));
 	}
 
 	public static function getKeyboard(num: Int = 0): Keyboard {
@@ -203,7 +192,7 @@ class SystemImpl {
 
 	public static function step(): Void {
 		Scheduler.executeFrame();
-		System.render(0, framebuffer);
+		System.render([framebuffer]);
 	}
 
 	private static function setMousePosition(x : Int, y : Int){
@@ -268,6 +257,11 @@ class SystemImpl {
 
 		}
 	}
+	
+	public static function keyPress(char: String): Void {
+        	keyboard.sendPressEvent(char);
+    	}
+	
 
 	public static var showKeyboard: Bool;
 
@@ -298,7 +292,7 @@ class SystemImpl {
 	public static function setKeepScreenOn(on: Bool): Void {
 
 	}
-		
+
 	public static function loadUrl(url: String): Void {
 		var i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
 		KhaActivity.the().startActivity(i);
@@ -306,5 +300,25 @@ class SystemImpl {
 
 	public static function getGamepadId(index: Int): String {
 		return "unkown";
+	}
+
+	public static function safeZone(): Float {
+		return 1.0;
+	}
+
+	public static function login(): Void {
+
+	}
+
+	public static function automaticSafeZone(): Bool {
+		return true;
+	}
+
+	public static function setSafeZone(value: Float): Void {
+
+	}
+
+	public static function unlockAchievement(id: Int): Void {
+
 	}
 }

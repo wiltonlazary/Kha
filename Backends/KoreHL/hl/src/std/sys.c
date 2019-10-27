@@ -23,8 +23,8 @@
 
 #ifdef HL_CONSOLE
 #	include <posix/posix.h>
-#else
-
+#endif
+#if !defined(HL_CONSOLE) || defined(HL_WIN_DESKTOP)
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -37,6 +37,8 @@
 #	include <windows.h>
 #	include <direct.h>
 #	include <conio.h>
+#	include <fcntl.h>
+#	include <io.h>
 #	define getenv _wgetenv
 #	define putenv _wputenv
 #	define getcwd(buf,size) (void*)(int_val)GetCurrentDirectoryW(size,buf)
@@ -101,42 +103,57 @@ HL_PRIM bool hl_sys_utf8_path() {
 }
 
 HL_PRIM vbyte *hl_sys_string() {
-#if defined(HL_WIN) || defined(HL_CYGWIN) || defined(HL_MINGW)
+#if defined(HL_CONSOLE)
+	return (vbyte*)sys_platform_name();
+#elif defined(HL_WIN) || defined(HL_CYGWIN) || defined(HL_MINGW)
 	return (vbyte*)USTR("Windows");
-#elif defined(HL_GNUKBSD)
-	return (vbyte*)USTR("GNU/kFreeBSD");
-#elif defined(HL_LINUX)
-	return (vbyte*)USTR("Linux");
 #elif defined(HL_BSD)
 	return (vbyte*)USTR("BSD");
 #elif defined(HL_MAC)
 	return (vbyte*)USTR("Mac");
-#elif defined(HL_CONSOLE)
-	return (vbyte*)sys_platform_name();
 #elif defined(HL_IOS)
 	return (vbyte*)USTR("iOS");
 #elif defined(HL_TVOS)
 	return (vbyte*)USTR("tvOS");
 #elif defined(HL_ANDROID)
 	return (vbyte*)USTR("Android");
+#elif defined(HL_GNUKBSD)
+	return (vbyte*)USTR("GNU/kFreeBSD");
+#elif defined(HL_LINUX)
+	return (vbyte*)USTR("Linux");
 #else
 #error Unknown system string
 #endif
 }
 
 HL_PRIM vbyte *hl_sys_locale() {
-#ifdef HL_WIN
+#if defined(HL_WIN_DESKTOP)
 	wchar_t loc[LOCALE_NAME_MAX_LENGTH];
 	int len = GetSystemDefaultLocaleName(loc,LOCALE_NAME_MAX_LENGTH);
 	return len == 0 ? NULL : hl_copy_bytes((vbyte*)loc,(len+1)*2);
+#elif defined(HL_CONSOLE)
+	return (vbyte*)sys_get_user_lang();
 #else
-	return (vbyte*)setlocale(LC_ALL, NULL);
+	return (vbyte*)getenv("LANG");
 #endif
 }
 
 HL_PRIM void hl_sys_print( vbyte *msg ) {
 	hl_blocking(true);
+#	ifdef HL_XBO
+	OutputDebugStringW((LPCWSTR)msg);
+#	else
+
+#	ifdef HL_WIN_DESKTOP
+	_setmode(_fileno(stdout),_O_U8TEXT);
+#	endif
 	uprintf(USTR("%s"),(uchar*)msg);
+	fflush(stdout);
+#	ifdef HL_WIN_DESKTOP
+	_setmode(_fileno(stdout),_O_TEXT);
+#	endif
+
+#	endif
 	hl_blocking(false);
 }
 
@@ -183,11 +200,11 @@ HL_PRIM bool hl_sys_put_env( vbyte *e, vbyte *v ) {
 #	define environ (*_NSGetEnviron())
 #endif
 
-#ifdef HL_WIN
+#ifdef HL_WIN_DESKTOP
 #	undef environ
 #	define environ _wenviron
 #else
-extern char **environ;
+extern pchar **environ;
 #endif
 
 HL_PRIM varray *hl_sys_env() {
@@ -195,6 +212,12 @@ HL_PRIM varray *hl_sys_env() {
 	pchar **e = environ;
 	pchar **arr;
 	int count = 0;
+#	ifdef HL_WIN_DESKTOP
+	if( e == NULL ) {
+		_wgetenv(L"");
+		e = environ;
+	}
+#	endif
 	while( *e ) {
 		pchar *x = pstrchr(*e,'=');
 		if( x == NULL ) {
@@ -529,7 +552,7 @@ HL_PRIM vbyte *hl_sys_exe_path() {
 		return NULL;
 	return (vbyte*)pstrdup(path,-1);
 #elif defined(HL_CONSOLE)
-	return (vbyte*)sys_exe_path();
+	return sys_exe_path();
 #else
 	const pchar *p = getenv("_");
 	if( p != NULL )
@@ -546,7 +569,7 @@ HL_PRIM vbyte *hl_sys_exe_path() {
 }
 
 HL_PRIM int hl_sys_get_char( bool b ) {
-#	if defined(HL_WIN)
+#	if defined(HL_WIN_DESKTOP)
 	return b?getche():getch();
 #	elif defined(HL_CONSOLE)
 	return -1;
@@ -584,10 +607,24 @@ HL_PRIM void hl_sys_init(void **args, int nargs, void *hlfile) {
 	sys_args = (pchar**)args;
 	sys_nargs = nargs;
 	hl_file = hlfile;
+#	ifdef HL_WIN_DESKTOP
+	setlocale(LC_CTYPE, ""); // printf to current locale
+#	endif
 }
 
 HL_PRIM vbyte *hl_sys_hl_file() {
-	return hl_file;
+	return (vbyte*)hl_file;
+}
+
+static void *reload_fun = NULL;
+static void *reload_param = NULL;
+HL_PRIM void hl_setup_reload_check( void *freload, void *param ) {
+	reload_fun = freload;
+	reload_param = param;
+}
+
+HL_PRIM bool hl_sys_check_reload() {
+	return reload_fun && ((bool(*)(void*))reload_fun)(reload_param);
 }
 
 #ifndef HL_MOBILE
@@ -629,3 +666,4 @@ DEFINE_PRIM(_BYTES, sys_exe_path, _NO_ARG);
 DEFINE_PRIM(_I32, sys_get_char, _BOOL);
 DEFINE_PRIM(_ARR, sys_args, _NO_ARG);
 DEFINE_PRIM(_I32, sys_getpid, _NO_ARG);
+DEFINE_PRIM(_BOOL, sys_check_reload, _NO_ARG);

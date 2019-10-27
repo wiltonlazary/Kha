@@ -88,6 +88,10 @@ class EmptyGraphics4 implements Graphics {
 		
 	}
 
+	public function setStencilReferenceValue(value: Int) {
+
+	}
+
 	public function scissor(x: Int, y: Int, width: Int, height: Int): Void {
 		
 	}
@@ -136,16 +140,20 @@ class EmptyGraphics4 implements Graphics {
 	
 	}
 
+	public function setTextureCompareMode(texunit: TextureUnit, enabled: Bool): Void {
+
+	}
+
+	public function setCubeMapCompareMode(texunit: TextureUnit, enabled: Bool): Void {
+		
+	}
+
 	public function setCubeMap(stage: kha.graphics4.TextureUnit, cubeMap: kha.graphics4.CubeMap): Void {
 		
 	}
 	
 	public function setCubeMapDepth(stage: kha.graphics4.TextureUnit, cubeMap: kha.graphics4.CubeMap): Void {
 		
-	}
-	
-	public function renderTargetsInvertedY(): Bool {
-		return false;
 	}
 	
 	public function setPipeline(pipeline: PipelineState): Void {
@@ -157,6 +165,22 @@ class EmptyGraphics4 implements Graphics {
 	}
 
 	public function setInt(location: ConstantLocation, value: Int): Void {
+		
+	}
+
+	public function setInt2(location: ConstantLocation, value1: Int, value2: Int): Void {
+		
+	}
+
+	public function setInt3(location: ConstantLocation, value1: Int, value2: Int, value3: Int): Void {
+		
+	}
+
+	public function setInt4(location: ConstantLocation, value1: Int, value2: Int, value3: Int, value4: Int): Void {
+		
+	}
+
+	public function setInts(location: ConstantLocation, values: kha.arrays.Int32Array): Void {
 		
 	}
 

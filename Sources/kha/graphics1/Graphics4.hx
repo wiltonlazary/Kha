@@ -1,6 +1,7 @@
 package kha.graphics1;
 
 import kha.arrays.Float32Array;
+import kha.arrays.Int32Array;
 import kha.Blob;
 import kha.Color;
 import kha.FastFloat;
@@ -87,7 +88,7 @@ class Graphics4 implements kha.graphics4.Graphics {
 
 	public function setTextureArray(unit: TextureUnit, texture: Image): Void {
 
-	};
+	}
 
 	public function setVideoTexture(unit: TextureUnit, texture: Video): Void {
 		
@@ -95,13 +96,21 @@ class Graphics4 implements kha.graphics4.Graphics {
 
 	public function setImageTexture(unit: TextureUnit, texture: Image): Void {
 
-	};
+	}
 
 	public function setTextureParameters(texunit: TextureUnit, uAddressing: TextureAddressing, vAddressing: TextureAddressing, minificationFilter: TextureFilter, magnificationFilter: TextureFilter, mipmapFilter: MipMapFilter): Void {
 		
 	}
 
 	public function setTexture3DParameters(texunit: TextureUnit, uAddressing: TextureAddressing, vAddressing: TextureAddressing, wAddressing: TextureAddressing, minificationFilter: TextureFilter, magnificationFilter: TextureFilter, mipmapFilter: MipMapFilter): Void {
+		
+	}
+
+	public function setTextureCompareMode(texunit: TextureUnit, enabled: Bool): Void {
+
+	}
+
+	public function setCubeMapCompareMode(texunit: TextureUnit, enabled: Bool): Void {
 		
 	}
 
@@ -124,6 +133,10 @@ class Graphics4 implements kha.graphics4.Graphics {
 	public function setPipeline(pipeline: PipelineState): Void {
 		this.pipeline = pipeline;
 	}
+
+	public function setStencilReferenceValue(value: Int): Void {
+
+	}
 	
 	public function setBool(location: ConstantLocation, value: Bool): Void {
 		
@@ -131,6 +144,22 @@ class Graphics4 implements kha.graphics4.Graphics {
 
 	public function setInt(location: ConstantLocation, value: Int): Void {
 		
+	}
+	
+	public function setInt2(location: ConstantLocation, value1: Int, value2: Int): Void{
+
+	}
+	
+	public function setInt3(location: ConstantLocation, value1: Int, value2: Int, value3: Int): Void{
+
+	}
+	
+	public function setInt4(location: ConstantLocation, value1: Int, value2: Int, value3: Int, value4: Int): Void{
+
+	}
+	
+	public function setInts(location: ConstantLocation, ints: Int32Array): Void{
+
 	}
 
 	public function setFloat(location: ConstantLocation, value: FastFloat): Void {
@@ -248,7 +277,8 @@ class Graphics4 implements kha.graphics4.Graphics {
 							untyped vsinput[element.name] = data4;
 							vindex += 4;
 						case VertexData.Float4x4:
-							
+						case Short2Norm:
+						case Short4Norm:
 					}
 				}
 				vsinputs.push(vsinput);

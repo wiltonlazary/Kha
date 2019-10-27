@@ -18,7 +18,7 @@ import kha.math.FastVector4;
 
 class Graphics implements kha.graphics4.Graphics {
 	var renderTarget: Image;
-	
+
 	public function new(renderTarget: Canvas = null) {
 		if (Std.is(renderTarget, Image)) {
 			this.renderTarget = cast renderTarget;
@@ -70,7 +70,11 @@ class Graphics implements kha.graphics4.Graphics {
 	}
 
 	public function setVertexBuffers(vertexBuffers: Array<kha.graphics4.VertexBuffer>): Void {
-	
+		var ids = new Array<Int>();
+		for (buffer in vertexBuffers) {
+			ids.push(buffer._id);
+		}
+		Worker.postMessage({ command: 'setVertexBuffers', ids: ids });
 	}
 
 	public function createIndexBuffer(indexCount: Int, usage: Usage, canRead: Bool = false): kha.graphics4.IndexBuffer {
@@ -85,17 +89,17 @@ class Graphics implements kha.graphics4.Graphics {
 		Worker.postMessage({ command: 'setTexture', stage: cast(stage, kha.html5worker.TextureUnit)._id,
 			texture: texture == null ? -1 : texture.id, renderTarget: texture == null ? -1 : texture._rtid });
 	}
-	
+
 	public function setTextureDepth(stage: kha.graphics4.TextureUnit, texture: kha.Image): Void {
-	
+
 	}
-	
+
 	public function setTextureArray(unit: kha.graphics4.TextureUnit, texture: kha.Image): Void {
-	
+
 	}
 
 	public function setVideoTexture(unit: kha.graphics4.TextureUnit, texture: kha.Video): Void {
-	
+
 	}
 
 	public function setImageTexture(unit: kha.graphics4.TextureUnit, texture: kha.Image): Void {
@@ -104,25 +108,37 @@ class Graphics implements kha.graphics4.Graphics {
 
 	public function setTextureParameters(texunit: kha.graphics4.TextureUnit, uAddressing: TextureAddressing, vAddressing: TextureAddressing, minificationFilter: TextureFilter, magnificationFilter: TextureFilter, mipmapFilter: MipMapFilter): Void {
 		Worker.postMessage({ command: 'setTextureParameters', id: cast(texunit, kha.html5worker.TextureUnit)._id,
-			uAddressing: uAddressing.getIndex(), vAddressing: vAddressing.getIndex(),
-			minificationFilter: minificationFilter.getIndex(), magnificationFilter: magnificationFilter.getIndex(), mipmapFilter: mipmapFilter.getIndex()
+			uAddressing: uAddressing, vAddressing: vAddressing,
+			minificationFilter: minificationFilter, magnificationFilter: magnificationFilter, mipmapFilter: mipmapFilter
 		});
 	}
 
 	public function setTexture3DParameters(texunit: kha.graphics4.TextureUnit, uAddressing: TextureAddressing, vAddressing: TextureAddressing, wAddressing: TextureAddressing, minificationFilter: TextureFilter, magnificationFilter: TextureFilter, mipmapFilter: MipMapFilter): Void {
-	
+
+	}
+
+	public function setTextureCompareMode(texunit: kha.graphics4.TextureUnit, enabled: Bool): Void {
+
+	}
+
+	public function setCubeMapCompareMode(texunit: kha.graphics4.TextureUnit, enabled: Bool): Void {
+
 	}
 
 	public function setCubeMap(stage: kha.graphics4.TextureUnit, cubeMap: kha.graphics4.CubeMap): Void {
 
 	}
-	
+
 	public function setCubeMapDepth(stage: kha.graphics4.TextureUnit, cubeMap: kha.graphics4.CubeMap): Void {
 
 	}
 
 	public function setPipeline(pipe: PipelineState): Void {
 		Worker.postMessage({ command: 'setPipeline', id: pipe._id });
+	}
+
+	public function setStencilReferenceValue(value: Int): Void {
+
 	}
 
 	public function setBool(location: kha.graphics4.ConstantLocation, value: Bool): Void {
@@ -133,6 +149,26 @@ class Graphics implements kha.graphics4.Graphics {
 	public function setInt(location: kha.graphics4.ConstantLocation, value: Int): Void {
 		Worker.postMessage({ command: 'setInt', location: cast(location, kha.html5worker.ConstantLocation)._id,
 			value: value});
+	}
+
+	public function setInt2(location: kha.graphics4.ConstantLocation, value1: Int, value2: Int): Void {
+		Worker.postMessage({ command: 'setInt2', location: cast(location, kha.html5worker.ConstantLocation)._id,
+			_0: value1, _1: value2});
+	}
+
+	public function setInt3(location: kha.graphics4.ConstantLocation, value1: Int, value2: Int, value3: Int): Void {
+		Worker.postMessage({ command: 'setInt3', location: cast(location, kha.html5worker.ConstantLocation)._id,
+			_0: value1, _1: value2, _2: value3});
+	}
+
+	public function setInt4(location: kha.graphics4.ConstantLocation, value1: Int, value2: Int, value3: Int, value4: Int): Void {
+		Worker.postMessage({ command: 'setInt4', location: cast(location, kha.html5worker.ConstantLocation)._id,
+			_0: value1, _1: value2, _2: value3, _3: value4});
+	}
+
+	public function setInts(location: kha.graphics4.ConstantLocation, values: kha.arrays.Int32Array): Void {
+		Worker.postMessage({ command: 'setInts', location: cast(location, kha.html5worker.ConstantLocation)._id,
+			values: values});
 	}
 
 	public function setFloat(location: kha.graphics4.ConstantLocation, value: FastFloat): Void {
@@ -204,15 +240,11 @@ class Graphics implements kha.graphics4.Graphics {
 		Worker.postMessage({ command: 'disableScissor' });
 	}
 
-	public function renderTargetsInvertedY(): Bool {
-		return true;
-	}
-
 	public function drawIndexedVerticesInstanced(instanceCount : Int, start: Int = 0, count: Int = -1) {
-		
+		Worker.postMessage({ command: 'drawIndexedVerticesInstanced', instanceCount: instanceCount, start: start, count: count });
 	}
 
 	public function instancedRenderingAvailable(): Bool {
-		return false;
+		return true;
 	}
 }

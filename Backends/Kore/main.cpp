@@ -1,4 +1,7 @@
 #include <Kore/pch.h>
+
+#include <khalib/loader.h>
+
 //#include <Kore/Application.h>
 #include <Kore/Graphics4/Graphics.h>
 #include <Kore/Input/Gamepad.h>
@@ -11,11 +14,17 @@
 #include <Kore/IO/FileReader.h>
 #include <Kore/Log.h>
 #include <Kore/Threads/Mutex.h>
+#include <Kore/Threads/Thread.h>
 #include <Kore/Math/Random.h>
+#if HXCPP_API_LEVEL >= 332
+#include <hxinc/kha/SystemImpl.h>
+#include <hxinc/kha/input/Sensor.h>
+#include <hxinc/kha/audio2/Audio.h>
+#else
 #include <kha/SystemImpl.h>
 #include <kha/input/Sensor.h>
-#include <kha/ScreenRotation.h>
 #include <kha/audio2/Audio.h>
+#endif
 
 #include <limits>
 #include <stdio.h>
@@ -25,17 +34,13 @@
 	//#include <Kore/Vr/VrInterface.h>
 #endif
 
-extern "C" const char* hxRunLibrary();
-extern "C" void hxcpp_set_top_of_stack();
-void __hxcpp_register_current_thread();
-
 namespace {
 	using kha::SystemImpl_obj;
 	using kha::input::Sensor_obj;
 
 	Kore::Mutex mutex;
 	bool shift = false;
-	
+
 	void keyDown(Kore::KeyCode code) {
 		SystemImpl_obj::keyDown((int)code);
 	}
@@ -131,22 +136,24 @@ namespace {
 	void touchMove(int index, int x, int y) {
 		SystemImpl_obj::touchMove(index, x, y);
 	}
-	
+
 	bool visible = true;
 	bool paused = false;
 
 	void update() {
-		if (paused) return;
+		//**if (paused) return;
 		Kore::Audio2::update();
 
-		int windowCount = Kore::System::windowCount();
+		SystemImpl_obj::frame();
+
+		/*int windowCount = Kore::Window::count();
 
 		for (int windowIndex = 0; windowIndex < windowCount; ++windowIndex) {
 			if (visible) {
 				#ifndef VR_RIFT
 				Kore::Graphics4::begin(windowIndex);
                 #endif
-			
+
 				// Google Cardboard: Update the Distortion mesh
 				#ifdef VR_CARDBOARD
 				//	Kore::VrInterface::DistortionBefore();
@@ -157,27 +164,28 @@ namespace {
 				#ifndef VR_RIFT
                 Kore::Graphics4::end(windowIndex);
 				#endif
-			
+
 				// Google Cardboard: Call the DistortionMesh Renderer
 				#ifdef VR_CARDBOARD
 				//	Kore::VrInterface::DistortionAfter();
 				#endif
 
-				#ifndef VR_RIFT
-				if (!Kore::Graphics4::swapBuffers(windowIndex)) {
-					Kore::log(Kore::Error, "Graphics context lost.");
-					break;
-				}
-				#endif
+
 			}
+		}*/
+
+#ifndef VR_RIFT
+		if (!Kore::Graphics4::swapBuffers()) {
+			Kore::log(Kore::Error, "Graphics context lost.");
 		}
+#endif
 	}
-	
+
 	void foreground() {
 		visible = true;
 		SystemImpl_obj::foreground();
 	}
-	
+
 	void resume() {
 		SystemImpl_obj::resume();
 		paused = false;
@@ -187,12 +195,12 @@ namespace {
 		SystemImpl_obj::pause();
 		paused = true;
 	}
-	
+
 	void background() {
 		visible = false;
 		SystemImpl_obj::background();
 	}
-	
+
 	void shutdown() {
 		SystemImpl_obj::shutdown();
 	}
@@ -200,39 +208,64 @@ namespace {
 	void dropFiles(wchar_t* filePath) {
 		SystemImpl_obj::dropFiles(String(filePath));
 	}
-	
+
 	void orientation(Kore::Orientation orientation) {
 		/*switch (orientation) {
 			case Kore::OrientationLandscapeLeft:
-				::kha::Sys_obj::screenRotation = ::kha::ScreenRotation_obj::Rotation270;
+				::kha::Sys_obj::screenRotation = 270;
 				break;
 			case Kore::OrientationLandscapeRight:
-				::kha::Sys_obj::screenRotation = ::kha::ScreenRotation_obj::Rotation90;
+				::kha::Sys_obj::screenRotation = 90;
 				break;
 			case Kore::OrientationPortrait:
-				::kha::Sys_obj::screenRotation = ::kha::ScreenRotation_obj::RotationNone;
+				::kha::Sys_obj::screenRotation = 0;
 				break;
 			case Kore::OrientationPortraitUpsideDown:
-				::kha::Sys_obj::screenRotation = ::kha::ScreenRotation_obj::Rotation180;
+				::kha::Sys_obj::screenRotation = 180;
 				break;
 			case Kore::OrientationUnknown:
 				break;
 		}*/
 	}
-	
+
+#if defined(HXCPP_TELEMETRY) || defined(HXCPP_PROFILER) || defined(HXCPP_DEBUG)
+	const static bool gcInteractionStrictlyRequired = true;
+#else
+	const static bool gcInteractionStrictlyRequired = false;
+#endif
 	bool mixThreadregistered = false;
 
 	void mix(int samples) {
 		using namespace Kore;
 
+		int t0 = 99;
 #ifdef KORE_MULTITHREADED_AUDIO
-		if (!mixThreadregistered) {
-			__hxcpp_register_current_thread();
+		if (!mixThreadregistered && !::kha::audio2::Audio_obj::disableGcInteractions) {
+			hx::SetTopOfStack(&t0, true);
 			mixThreadregistered = true;
+			hx::EnterGCFreeZone();
+		}
+
+		//int addr = 0;
+		//Kore::log(Info, "mix address is %x", &addr);
+
+		if (mixThreadregistered && ::kha::audio2::Audio_obj::disableGcInteractions && !gcInteractionStrictlyRequired) {
+			//hx::UnregisterCurrentThread();
+			//mixThreadregistered = false;
+		}
+
+		if (mixThreadregistered) {
+			hx::ExitGCFreeZone();
 		}
 #endif
 
-		::kha::audio2::Audio_obj::_callCallback(samples);
+		::kha::audio2::Audio_obj::_callCallback(samples, Kore::Audio2::samplesPerSecond);
+
+#ifdef KORE_MULTITHREADED_AUDIO
+		if (mixThreadregistered) {
+			hx::EnterGCFreeZone();
+		}
+#endif
 
 		for (int i = 0; i < samples; ++i) {
 			float value = ::kha::audio2::Audio_obj::_readSample();
@@ -257,49 +290,22 @@ namespace {
 	void paste(char* data) {
 		SystemImpl_obj::paste(String(data));
 	}
+
+  void login() {
+    SystemImpl_obj::loginevent();
+  }
+
+  void logout() {
+    SystemImpl_obj::logoutevent();
+  }
 }
 
-void init_kore_impl(bool ex, const char* name, int width, int height, int x, int y, int display, Kore::WindowMode windowMode, int antialiasing, bool vSync, bool resizable, bool maximizable, bool minimizable) {
+void init_kore(const char* name, int width, int height, Kore::WindowOptions* win, Kore::FramebufferOptions* frame) {
 	Kore::log(Kore::Info, "Starting Kore");
 
-	Kore::Random::init(static_cast<int>(Kore::System::timestamp() % std::numeric_limits<int>::max()));
-	Kore::System::setName(name);
-	Kore::System::setup();
+	Kore::System::init(name, width, height, win, frame);
 
-	if (ex) {
-
-	}
-	else {
-		width = Kore::min(width, Kore::System::desktopWidth());
-		height = Kore::min(height, Kore::System::desktopHeight());
-
-		Kore::WindowOptions options;
-		options.title = name;
-		options.width = width;
-		options.height = height;
-		options.x = x;
-		options.y = y;
-		options.vSync = vSync;
-		options.targetDisplay = display;
-		options.mode = windowMode;
-		options.resizable = resizable;
-		options.maximizable = maximizable;
-		options.minimizable = minimizable;
-		options.rendererOptions.depthBufferBits = 16;
-		options.rendererOptions.stencilBufferBits = 8;
-		options.rendererOptions.textureFormat = 0;
-		options.rendererOptions.antialiasing = antialiasing;
-
-		/*int windowId =*/ Kore::System::initWindow(options); // TODO (DK) save window id anywhere?
-	}
-
-	//Kore::Mixer::init();
 	mutex.create();
-
-	// (DK) moved to post_kore_init
-//#ifndef VR_RIFT
-//	Kore::Graphics::setRenderState(Kore::DepthTest, false);
-//#endif
 
 	Kore::System::setOrientationCallback(orientation);
 	Kore::System::setForegroundCallback(foreground);
@@ -312,6 +318,8 @@ void init_kore_impl(bool ex, const char* name, int width, int height, int x, int
 	Kore::System::setCopyCallback(copy);
 	Kore::System::setCutCallback(cut);
 	Kore::System::setPasteCallback(paste);
+	Kore::System::setLoginCallback(login);
+	Kore::System::setLogoutCallback(logout);
 
 	Kore::Keyboard::the()->KeyDown = keyDown;
 	Kore::Keyboard::the()->KeyUp = keyUp;
@@ -337,59 +345,55 @@ void init_kore_impl(bool ex, const char* name, int width, int height, int x, int
 	Kore::Surface::the()->Move = touchMove;
 	Kore::Sensor::the(Kore::SensorAccelerometer)->Changed = accelerometerChanged;
 	Kore::Sensor::the(Kore::SensorGyroscope)->Changed = gyroscopeChanged;
-
-	// (DK) moved to post_kore_init
-//#ifdef VR_GEAR_VR
-//	// Enter VR mode
-//	Kore::VrInterface::Initialize();
-//#endif
 }
 
 const char* getGamepadId(int index) {
 	return Kore::Gamepad::get(index)->productName;
 }
 
-void init_kore(const char* name, int width, int height, int antialiasing, bool vSync, int windowMode, bool resizable, bool maximizable, bool minimizable) {
-	init_kore_impl(false, name, width, height, -1, -1, -1, (Kore::WindowMode)windowMode, antialiasing, vSync, resizable, maximizable, minimizable);
-}
-
-void init_kore_ex(const char* name) {
-	init_kore_impl(true, name, -1, -1, -1, -1, -1, Kore::WindowModeWindow, 0, false, false, false, true);
-}
-
 void post_kore_init() {
-	// (DK) make main window context current, all assets bind to it and are shared
-	Kore::System::makeCurrent(0);
-
-	Kore::Audio2::audioCallback = mix;
-	Kore::Audio2::init();
-
 #ifdef VR_GEAR_VR
 	// Enter VR mode
 	Kore::VrInterface::Initialize();
 #endif
 }
 
-int init_window(Kore::WindowOptions options) {
-	return Kore::System::initWindow(options);
-}
-
 void run_kore() {
 	Kore::log(Kore::Info, "Starting application");
+	Kore::Audio2::audioCallback = mix;
+	Kore::Audio2::init();
+	::kha::audio2::Audio_obj::samplesPerSecond = Kore::Audio2::samplesPerSecond;
 	Kore::System::start();
 	Kore::log(Kore::Info, "Application stopped");
 #if !defined(KORE_XBOX_ONE) && !defined(KORE_TIZEN) && !defined(KORE_HTML5)
+	Kore::threadsQuit();
 	Kore::System::stop();
 #endif
 }
 
-int kore(int argc, char** argv) {
-	Kore::log(Kore::Info, "Initializing Haxe libraries");
-	hxcpp_set_top_of_stack();
-	const char* err = hxRunLibrary();
-	if (err) {
-		Kore::log(Kore::Error, "Error %s", err);
-		return 1;
+extern "C" void __hxcpp_main();
+extern int _hxcpp_argc;
+extern char **_hxcpp_argv;
+
+int kickstart(int argc, char **argv) {
+	_hxcpp_argc = argc;
+	_hxcpp_argv = argv;
+	Kore::threadsInit();
+	kha_loader_init();
+	HX_TOP_OF_STACK
+	hx::Boot();
+#ifdef NDEBUG
+	try {
+#endif
+		__boot_all();
+		__hxcpp_main();
+#ifdef NDEBUG
 	}
+	catch (Dynamic e) {
+		__hx_dump_stack();
+		Kore::log(Kore::Error, "Error %s", e == null() ? "null" : e->toString().__CStr());
+		return -1;
+	}
+#endif
 	return 0;
 }

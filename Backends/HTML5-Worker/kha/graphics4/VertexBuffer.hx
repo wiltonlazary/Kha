@@ -15,9 +15,9 @@ class VertexBuffer {
 	var offsets: Array<Int>;
 	var usage: Usage;
 	var instanceDataStepRate: Int;
-	var lockStart: Int = -1;
-	var lockEnd: Int = -1;
-	
+	var lockStart: Int = 0;
+	var lockCount: Int = 0;
+
 	public function new(vertexCount: Int, structure: VertexStructure, usage: Usage, instanceDataStepRate: Int = 0, canRead: Bool = false) {
 		this.usage = usage;
 		this.instanceDataStepRate = instanceDataStepRate;
@@ -35,20 +35,24 @@ class VertexBuffer {
 				myStride += 4 * 4;
 			case Float4x4:
 				myStride += 4 * 4 * 4;
+			case Short2Norm:
+				myStride += 2 * 2;
+			case Short4Norm:
+				myStride += 4 * 2;
 			}
 		}
-	
+
 		_data = new Float32Array(Std.int(vertexCount * myStride / 4));
-		
+
 		sizes = new Array<Int>();
 		offsets = new Array<Int>();
 		sizes[structure.elements.length - 1] = 0;
 		offsets[structure.elements.length - 1] = 0;
-		
+
 		var offset = 0;
 		var index = 0;
 		for (element in structure.elements) {
-			var size;
+			var size = 0;
 			switch (element.data) {
 			case Float1:
 				size = 1;
@@ -60,6 +64,10 @@ class VertexBuffer {
 				size = 4;
 			case Float4x4:
 				size = 4 * 4;
+			case Short2Norm:
+				myStride += 2 * 2;
+			case Short4Norm:
+				myStride += 4 * 2;
 			}
 			sizes[index] = size;
 			offsets[index] = offset;
@@ -74,54 +82,48 @@ class VertexBuffer {
 				offset += 4 * 4;
 			case Float4x4:
 				offset += 4 * 4 * 4;
+			case Short2Norm:
+				myStride += 2 * 2;
+			case Short4Norm:
+				myStride += 4 * 2;
 			}
 			++index;
 		}
-		
+
 		_id = ++lastId;
 		var elements = new Array<Dynamic>();
 		for (element in structure.elements) {
 			elements.push({
 				name: element.name,
-				data: element.data.getIndex()
+				data: element.data
 			});
 		}
-		Worker.postMessage({ command: 'createVertexBuffer', id: _id, size: vertexCount, structure: {elements: elements}, usage: usage.getIndex()});
+		Worker.postMessage({ command: 'createVertexBuffer', id: _id, size: vertexCount, structure: {elements: elements}, usage: usage});
 	}
 
 	public function delete(): Void {
 		_data = null;
 	}
-	
+
 	public function lock(?start: Int, ?count: Int): Float32Array {
-		if (start == null) start = 0;
-		if (count == null) count = mySize;
-		if (lockStart < 0 || lockStart > start) {
-			lockStart = start;
-		}
-		if (lockEnd < 0 || lockEnd < start + count) {
-			lockEnd = start + count;
-		}
-		return _data.subarray(start * stride(), (start + count) * stride());
+		lockStart = start != null ? start : 0; 
+		lockCount = count != null ? count : mySize; 
+		return _data.subarray(lockStart * stride(), (lockStart + lockCount) * stride());
 	}
-	
-	public function unlock(): Void {
-		if (lockEnd > lockStart) {
-			var start = lockStart;
-			var count = lockEnd - lockStart;
-			Worker.postMessage({ command: 'updateVertexBuffer', id: _id, data: _data.subarray(start * stride(), (start + count) * stride()).data(), start: start, count: count });
-		}
-		lockStart = lockEnd = -1;
+
+	public function unlock(?count: Int): Void {
+		if(count != null) lockCount = count;
+		Worker.postMessage({ command: 'updateVertexBuffer', id: _id, data: _data.subarray(lockStart * stride(), (lockStart + lockCount) * stride()).data(), start: lockStart, count: lockCount });
 	}
-	
+
 	public function stride(): Int {
 		return myStride;
 	}
-	
+
 	public function count(): Int {
 		return mySize;
 	}
-	
+
 	public function set(offset: Int): Int {
 		var attributesOffset = 0;
 		for (i in 0...sizes.length) {

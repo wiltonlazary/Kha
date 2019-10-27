@@ -3,6 +3,7 @@ package kha;
 import kha.graphics4.Graphics2;
 import kha.input.Gamepad;
 import kha.input.Keyboard;
+import kha.input.KeyCode;
 import system.diagnostics.Stopwatch;
 import kha.System;
 
@@ -39,7 +40,7 @@ class SystemImpl {
 	public static function screenDpi(): Int {
 		return 96;
 	}
-	
+
 	public static function getVsync(): Bool {
 		return true;
 	}
@@ -56,33 +57,31 @@ class SystemImpl {
 		return false;
 	}
 
-	public static function requestFullscreen(): Void {
+	public static function requestFullscreen(): Void {}
 
-	}
+	public static function exitFullscreen(): Void {}
 
-	public static function exitFullscreen(): Void {
+	public static function notifyOfFullscreenChange(func: Void -> Void, error: Void -> Void): Void {}
 
-  	}
+	public static function removeFromFullscreenChange(func: Void -> Void, error: Void -> Void): Void {}
 
-	public static function notifyOfFullscreenChange(func: Void -> Void, error: Void -> Void): Void {
+	public static function changeResolution(width: Int, height: Int): Void {}
 
-	}
-
-
-	public static function removeFromFullscreenChange(func: Void -> Void, error: Void -> Void): Void {
-
-	}
-
-	public static function changeResolution(width: Int, height: Int): Void {
-
-	}
-
-	public static function requestShutdown(): Void {
-
+	public static function requestShutdown(): Bool {
+		// unityEngine.Application.Quit();
+		return true;
 	}
 
 	public static function getSystemId(): String {
 		return "unity";
+	}
+
+	public static function vibrate(ms:Int): Void {
+		//TODO: Implement
+	}
+
+	public static function getLanguage(): String {
+		return "en"; //TODO: Implement
 	}
 
 	private static var frame: Framebuffer;
@@ -95,26 +94,30 @@ class SystemImpl {
 	private static var gamepad2: Gamepad;
 	private static var gamepad3: Gamepad;
 	private static var gamepad4: Gamepad;
-	
-	public static function init(options: SystemOptions, callback: Void -> Void) {
+
+	public static function init(options: SystemOptions, callback: Window -> Void) {
 		init2();
 		Scheduler.init();
+		new Window(0);
+		Window.get(0).title = options.title;
+		// TODO: update shaders in %kha%\Backends\Unity\kha\graphics4
+		Shaders.init();
+
 		keyboard = new Keyboard();
 		mouse = new kha.input.Mouse();
 		gamepad1 = new Gamepad(0);
 		gamepad2 = new Gamepad(1);
 		gamepad3 = new Gamepad(2);
 		gamepad4 = new Gamepad(3);
-		Scheduler.init();
-		Shaders.init();
+
 		var g4 = new kha.unity.Graphics(null);
 		frame = new Framebuffer(0, null, null, g4);
 		frame.init(new kha.graphics2.Graphics1(frame), new Graphics2(frame), g4);
 		Scheduler.start();
-		callback();
+		callback(Window.get(0));
 	}
 
-	public static function initEx( title : String, options : Array<WindowOptions>, windowCallback : Int -> Void, callback : Void -> Void) {
+	public static function initEx( title : String, options : Array<WindowOptions>, windowCallback : Int -> Void, callback : Window -> Void) {
 		trace('System.initEx is not supported on unity, falling back to init() with first window options');
 		init( { title : title, width : options[0].width, height : options[0].height }, callback);
 
@@ -133,13 +136,9 @@ class SystemImpl {
 		else return null;
 	}
 
-	public static function lockMouse(): Void {
+	public static function lockMouse(): Void {}
 
-	}
-
-	public static function unlockMouse(): Void {
-
-	}
+	public static function unlockMouse(): Void {}
 
 	public static function canLockMouse(): Bool {
 		return false;
@@ -149,46 +148,40 @@ class SystemImpl {
 		return false;
 	}
 
-	public static function notifyOfMouseLockChange(func: Void -> Void, error: Void -> Void): Void {
+	public static function notifyOfMouseLockChange(func: Void -> Void, error: Void -> Void): Void {}
 
-	}
-
-
-	public static function removeFromMouseLockChange(func: Void -> Void, error: Void -> Void): Void {
-
-	}
-
+	public static function removeFromMouseLockChange(func: Void -> Void, error: Void -> Void): Void {}
 
 	public static function leftDown(): Void {
-		Keyboard.get().sendDownEvent(Key.LEFT, '');
+		Keyboard.get().sendDownEvent(KeyCode.Left);
 	}
 
 	public static function rightDown(): Void {
-		Keyboard.get().sendDownEvent(Key.RIGHT, '');
+		Keyboard.get().sendDownEvent(KeyCode.Right);
 	}
 
 	public static function upDown(): Void {
-		Keyboard.get().sendDownEvent(Key.UP, '');
+		Keyboard.get().sendDownEvent(KeyCode.Up);
 	}
 
 	public static function downDown(): Void {
-		Keyboard.get().sendDownEvent(Key.DOWN, '');
+		Keyboard.get().sendDownEvent(KeyCode.Down);
 	}
 
 	public static function leftUp(): Void {
-		Keyboard.get().sendUpEvent(Key.LEFT, '');
+		Keyboard.get().sendUpEvent(KeyCode.Left);
 	}
 
 	public static function rightUp(): Void {
-		Keyboard.get().sendUpEvent(Key.RIGHT, '');
+		Keyboard.get().sendUpEvent(KeyCode.Right);
 	}
 
 	public static function upUp(): Void {
-		Keyboard.get().sendUpEvent(Key.UP, '');
+		Keyboard.get().sendUpEvent(KeyCode.Up);
 	}
 
 	public static function downUp(): Void {
-		Keyboard.get().sendUpEvent(Key.DOWN, '');
+		Keyboard.get().sendUpEvent(KeyCode.Down);
 	}
 
 	public static function mouseDown(button: Int, x: Int, y: Int): Void {
@@ -198,7 +191,7 @@ class SystemImpl {
 	public static function mouseUp(button: Int, x: Int, y: Int): Void {
 		kha.input.Mouse.get().sendUpEvent(0, button, x, y);
 	}
-	
+
 	public static function gamepad1Axis(axis: Int, value: Float): Void {
 		gamepad1.sendAxisEvent(axis, value);
 	}
@@ -233,18 +226,28 @@ class SystemImpl {
 
 	public static function update(): Void {
 		Scheduler.executeFrame();
-		System.render(0, frame);
-	}
-	
-	public static function setKeepScreenOn(on: Bool): Void {
-		
+		System.render([frame]);
 	}
 
-	public static function loadUrl(url: String): Void {
-		
-	}
+	public static function setKeepScreenOn(on: Bool): Void {}
+
+	public static function loadUrl(url: String): Void {}
 
 	public static function getGamepadId(index: Int): String {
 		return "unkown";
 	}
+
+	public static function safeZone(): Float {
+		return 1.0;
+	}
+
+	public static function login(): Void {}
+
+	public static function automaticSafeZone(): Bool {
+		return true;
+	}
+
+	public static function setSafeZone(value: Float): Void {}
+
+	public static function unlockAchievement(id: Int): Void {}
 }

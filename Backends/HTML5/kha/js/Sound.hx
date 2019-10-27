@@ -5,7 +5,6 @@ import js.html.AudioElement;
 import js.html.ErrorEvent;
 import js.html.Event;
 import js.html.MediaError;
-import js.Lib;
 
 using StringTools;
 
@@ -75,6 +74,7 @@ class Sound extends kha.Sound {
 		for (filename in filenames) {
 			if (element.canPlayType("audio/ogg") != "" && filename.endsWith(".ogg")) this.filenames.push(filename);
 			if (element.canPlayType("audio/mp4") != "" && filename.endsWith(".mp4")) this.filenames.push(filename);
+			if (element.canPlayType("audio/wav") != "" && filename.endsWith(".wav")) this.filenames.push(filename);
 		}
 
 		element.addEventListener("error", errorListener, false);

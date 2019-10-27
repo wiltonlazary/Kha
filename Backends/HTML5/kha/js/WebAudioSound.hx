@@ -1,6 +1,5 @@
 package kha.js;
 
-import haxe.ds.Vector;
 import haxe.io.Bytes;
 import js.Browser;
 import js.html.XMLHttpRequest;
@@ -81,61 +80,34 @@ class WebAudioSound extends kha.Sound {
 
 	override public function uncompress(done: Void->Void): Void {
 		Audio._context.decodeAudioData(compressedData.getData(),
-		function (buffer) {
-			var ch0 = buffer.getChannelData(0);
-			var len = ch0.length;
+		function (buffer: js.html.audio.AudioBuffer) {
+			final ch0 = buffer.getChannelData(0);
+			final ch1 = buffer.numberOfChannels == 1 ? ch0 : buffer.getChannelData(1);
+			final len = ch0.length;
 			uncompressedData = new kha.arrays.Float32Array(len * 2);
-			if (buffer.numberOfChannels == 1) {
-				var idx = 0;
-				var i = 0;
-				var lidx = len * 2;
-				var uncompressInner = function () {
-
-				};
-				uncompressInner = function () {
-					var chk_len = idx + 11025;
-					var next_chk = chk_len > lidx ? lidx : chk_len;
-					while(idx < next_chk) {
-						uncompressedData[idx] = ch0[i];
-						uncompressedData[idx+1] = ch0[i];
-						idx += 2;
-						++i;
-					}
-					if (idx < lidx)
-						js.Browser.window.setTimeout(uncompressInner,0);
-					else {
-						compressedData = null;
-					}
-				};
-				uncompressInner();
-				js.Browser.window.setTimeout(done,250);
-			}
-			else {
-				var ch1 = buffer.getChannelData(1);
-				var idx = 0;
-				var i = 0;
-				var lidx = len * 2;
-				var uncompressInner = function () {
-
-				};
-				uncompressInner = function () {
-					var chk_len = idx + 11025;
-					var next_chk = chk_len > lidx ? lidx : chk_len;
-					while(idx < next_chk) {
-						uncompressedData[idx] = ch0[i];
-						uncompressedData[idx+1] = ch1[i];
-						idx += 2;
-						++i;
-					}
-					if (idx < lidx)
-						js.Browser.window.setTimeout(uncompressInner,0);
-					else {
-						compressedData = null;
-					}
-				};
-				uncompressInner();
-				js.Browser.window.setTimeout(done,250);
-			}
+			length = buffer.duration;
+			channels = buffer.numberOfChannels;
+			sampleRate = Math.round(buffer.sampleRate);
+			var idx = 0;
+			var i = 0;
+			final lidx = len * 2;
+			function uncompressInner() {
+				var chk_len = idx + 11025;
+				var next_chk = chk_len > lidx ? lidx : chk_len;
+				while(idx < next_chk) {
+					uncompressedData[idx] = ch0[i];
+					uncompressedData[idx+1] = ch1[i];
+					idx += 2;
+					++i;
+				}
+				if (idx < lidx)
+					js.Browser.window.setTimeout(uncompressInner,0);
+				else {
+					compressedData = null;
+					done();
+				}
+			};
+			uncompressInner();
 		},
 		function () {
 			superUncompress(done);

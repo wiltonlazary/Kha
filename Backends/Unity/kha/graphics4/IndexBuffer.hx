@@ -7,7 +7,7 @@ class IndexBuffer {
 	public var nativeCutIndices: NativeArray<Int>;
 	private var indices: Array<Int>;
 	private var indexCount: Int;
-	
+
 	public function new(indexCount: Int, usage: Usage, canRead: Bool = false) {
 		this.indexCount = indexCount;
 		indices = new Array<Int>();
@@ -15,19 +15,17 @@ class IndexBuffer {
 		nativeCutIndices = new NativeArray<Int>(indexCount);
 	}
 
-	public function lock(): Array<Int> {
+	public function lock(?start: Int, ?count: Int): Array<Int> {
 		return indices;
 	}
 
-	public function unlock(): Void {
+	public function unlock(?count: Int): Void {
 		for (i in 0...indexCount) {
 			nativeIndices[i] = indices[i];
 		}
 	}
 
-	public function set(): Void {
-		
-	}
+	public function set(): Void {}
 
 	public function count(): Int {
 		return indexCount;

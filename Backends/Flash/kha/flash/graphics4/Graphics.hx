@@ -213,6 +213,14 @@ class Graphics implements kha.graphics4.Graphics {
 	
 	}
 
+	public function setTextureCompareMode(texunit: kha.graphics4.TextureUnit, enabled: Bool): Void {
+
+	}
+
+	public function setCubeMapCompareMode(texunit: kha.graphics4.TextureUnit, enabled: Bool): Void {
+		
+	}
+
 	private function getBlendFactor(op: BlendingFactor): Context3DBlendFactor {
 		switch (op) {
 			case BlendZero, Undefined:
@@ -271,10 +279,20 @@ class Graphics implements kha.graphics4.Graphics {
 	public function setPipeline(pipe: PipelineState): Void {
 		setCullMode(pipe.cullMode);
 		setDepthMode(pipe.depthWrite, pipe.depthMode);
-		setStencilParameters(pipe.stencilMode, pipe.stencilBothPass, pipe.stencilDepthFail, pipe.stencilFail, pipe.stencilReferenceValue, pipe.stencilReadMask, pipe.stencilWriteMask);
+		var stencilReferenceValue = 0;
+		switch (pipe.stencilReferenceValue) {
+			case Static(value):
+				stencilReferenceValue = value;
+			default:
+		}
+		setStencilParameters(pipe.stencilMode, pipe.stencilBothPass, pipe.stencilDepthFail, pipe.stencilFail, stencilReferenceValue, pipe.stencilReadMask, pipe.stencilWriteMask);
 		setBlendingMode(pipe.blendSource, pipe.blendDestination);
 		context.setColorMask(pipe.colorWriteMaskRed, pipe.colorWriteMaskGreen, pipe.colorWriteMaskBlue, pipe.colorWriteMaskAlpha);
 		pipe.set();
+	}
+
+	public function setStencilReferenceValue(value: Int): Void {
+
 	}
 
 	//public function createTexture(width: Int, height: Int, format: TextureFormat, usage: Usage, canRead: Bool = false, levels: Int = 1): Texture {
@@ -338,6 +356,40 @@ class Graphics implements kha.graphics4.Graphics {
 		var vec = new Vector<Float>(4);
 		vec[0] = value;
 		context.setProgramConstantsFromVector(flashLocation.type, flashLocation.value, vec);
+	}
+
+	public function setInt2(location: kha.graphics4.ConstantLocation, value1: Int, value2: Int): Void {
+		var flashLocation = cast(location, ConstantLocation);
+		var vec = new Vector<Float>(4);
+		vec[0] = value1;
+		vec[1] = value2;
+		context.setProgramConstantsFromVector(flashLocation.type, flashLocation.value, vec);
+	}
+
+	public function setInt3(location: kha.graphics4.ConstantLocation, value1: Int, value2: Int, value3: Int): Void {
+		var flashLocation = cast(location, ConstantLocation);
+		var vec = new Vector<Float>(4);
+		vec[0] = value1;
+		vec[1] = value2;
+		vec[2] = value3;
+		context.setProgramConstantsFromVector(flashLocation.type, flashLocation.value, vec);
+	}
+
+	public function setInt4(location: kha.graphics4.ConstantLocation, value1: Int, value2: Int, value3: Int, value4: Int): Void {
+		var flashLocation = cast(location, ConstantLocation);
+		var vec = new Vector<Float>(4);
+		vec[0] = value1;
+		vec[1] = value2;
+		vec[2] = value3;
+		vec[3] = value4;
+		context.setProgramConstantsFromVector(flashLocation.type, flashLocation.value, vec);
+	}
+
+	public function setInts(location: kha.graphics4.ConstantLocation, values: kha.arrays.Int32Array): Void {
+		var flashLocation: ConstantLocation = cast location;
+		var vals = new flash.Vector<Float>(values.length);
+		for (i in 0...values.length) vals[i] = values.get(i);
+		context.setProgramConstantsFromVector(flashLocation.type, flashLocation.value, vals);
 	}
 
 	public function setFloat(location: kha.graphics4.ConstantLocation, value: FastFloat): Void {
@@ -431,10 +483,6 @@ class Graphics implements kha.graphics4.Graphics {
 	//public function renderToTexture(texture: Texture): Void {
 	//	context.setRenderToTexture(cast(texture, Image).getFlashTexture(), cast(texture, Image).hasDepthStencil());
 	//}
-
-	public function renderTargetsInvertedY(): Bool {
-		return false;
-	}
 
 	public function begin(additionalRenderTargets: Array<Canvas> = null): Void {
 		if (target == null) context.setRenderToBackBuffer();

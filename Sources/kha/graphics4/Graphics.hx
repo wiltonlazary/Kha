@@ -1,7 +1,7 @@
 package kha.graphics4;
 
 import kha.arrays.Float32Array;
-import kha.Blob;
+import kha.arrays.Int32Array;
 import kha.Color;
 import kha.FastFloat;
 import kha.Image;
@@ -38,18 +38,24 @@ interface Graphics {
 	function setImageTexture(unit: TextureUnit, texture: Image): Void;
 	function setTextureParameters(texunit: TextureUnit, uAddressing: TextureAddressing, vAddressing: TextureAddressing, minificationFilter: TextureFilter, magnificationFilter: TextureFilter, mipmapFilter: MipMapFilter): Void;
 	function setTexture3DParameters(texunit: TextureUnit, uAddressing: TextureAddressing, vAddressing: TextureAddressing, wAddressing: TextureAddressing, minificationFilter: TextureFilter, magnificationFilter: TextureFilter, mipmapFilter: MipMapFilter): Void;
+	function setTextureCompareMode(texunit: TextureUnit, enabled: Bool): Void;
+	function setCubeMapCompareMode(texunit: TextureUnit, enabled: Bool): Void;
 	function setCubeMap(unit: TextureUnit, cubeMap: CubeMap): Void;
 	function setCubeMapDepth(unit: TextureUnit, cubeMap: CubeMap): Void;
 	//function maxTextureSize(): Int;
 	//function supportsNonPow2Textures(): Bool;
+	function setStencilReferenceValue(value: Int): Void;
 	
-	function renderTargetsInvertedY(): Bool;
 	function instancedRenderingAvailable(): Bool;
 	
 	function setPipeline(pipeline: PipelineState): Void;
 	
 	function setBool(location: ConstantLocation, value: Bool): Void;
 	function setInt(location: ConstantLocation, value: Int): Void;
+	function setInt2(location: ConstantLocation, value1: Int, value2: Int): Void;
+	function setInt3(location: ConstantLocation, value1: Int, value2: Int, value3: Int): Void;
+	function setInt4(location: ConstantLocation, value1: Int, value2: Int, value3: Int, value4: Int): Void;
+	function setInts(location: ConstantLocation, ints: Int32Array): Void;
 	function setFloat(location: ConstantLocation, value: FastFloat): Void;
 	function setFloat2(location: ConstantLocation, value1: FastFloat, value2: FastFloat): Void;
 	function setFloat3(location: ConstantLocation, value1: FastFloat, value2: FastFloat, value3: FastFloat): Void;

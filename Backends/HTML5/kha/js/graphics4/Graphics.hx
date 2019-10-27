@@ -1,39 +1,33 @@
 package kha.js.graphics4;
 
+import kha.graphics4.StencilValue;
 import kha.arrays.Float32Array;
+import kha.arrays.Int32Array;
 import js.html.webgl.GL;
-import kha.Blob;
 import kha.graphics4.BlendingFactor;
 import kha.graphics4.BlendingOperation;
 import kha.graphics4.CompareMode;
 import kha.graphics4.CubeMap;
 import kha.graphics4.CullMode;
-import kha.graphics4.FragmentShader;
 import kha.graphics4.IndexBuffer;
 import kha.graphics4.MipMapFilter;
 import kha.graphics4.PipelineState;
 import kha.graphics4.StencilAction;
-import kha.graphics4.TexDir;
 import kha.graphics4.TextureAddressing;
 import kha.graphics4.TextureFilter;
-import kha.graphics4.TextureFormat;
 import kha.graphics4.Usage;
 import kha.graphics4.VertexBuffer;
 import kha.graphics4.VertexStructure;
-import kha.graphics4.VertexShader;
 import kha.Image;
 import kha.math.FastMatrix3;
 import kha.math.FastMatrix4;
 import kha.math.FastVector2;
 import kha.math.FastVector3;
 import kha.math.FastVector4;
-import kha.math.Matrix4;
-import kha.math.Vector2;
-import kha.math.Vector3;
-import kha.math.Vector4;
 import kha.WebGLImage;
 
 class Graphics implements kha.graphics4.Graphics {
+	var currentPipeline: PipelineState = null;
 	private var depthTest: Bool = false;
 	private var depthMask: Bool = false;
 	private var colorMaskRed: Bool = true;
@@ -43,11 +37,19 @@ class Graphics implements kha.graphics4.Graphics {
 	private var indicesCount: Int;
 	private var renderTarget: Canvas;
 	private var renderTargetFrameBuffer: Dynamic;
+	private var renderTargetMSAA: Dynamic;
 	private var renderTargetTexture: Dynamic;
 	private var isCubeMap: Bool = false;
 	private var isDepthAttachment: Bool = false;
 	private var instancedExtension: Dynamic;
 	private var blendMinMaxExtension: Dynamic;
+	private var useVertexAttributes:Int=0;
+
+	// WebGL2 constants
+	// https://www.khronos.org/registry/webgl/specs/2.0.0/
+	private static inline var GL_TEXTURE_COMPARE_MODE = 0x884C;
+	private static inline var GL_TEXTURE_COMPARE_FUNC = 0x884D;
+	private static inline var GL_COMPARE_REF_TO_TEXTURE = 0x884E;
 
 	public function new(renderTarget: Canvas = null) {
 		this.renderTarget = renderTarget;
@@ -73,6 +75,7 @@ class Graphics implements kha.graphics4.Graphics {
 		else {
 			var image: WebGLImage = cast(renderTarget, WebGLImage);
 			renderTargetFrameBuffer = image.frameBuffer;
+			renderTargetMSAA=image.MSAAFrameBuffer;
 			renderTargetTexture = image.texture;
 		}
 	}
@@ -122,11 +125,19 @@ class Graphics implements kha.graphics4.Graphics {
 	}
 
 	public function end(): Void {
+		if (renderTargetMSAA != null) {
+			untyped SystemImpl.gl.bindFramebuffer(SystemImpl.gl.READ_FRAMEBUFFER, renderTargetFrameBuffer);
+			untyped SystemImpl.gl.bindFramebuffer(SystemImpl.gl.DRAW_FRAMEBUFFER, renderTargetMSAA);
+			untyped SystemImpl.gl.blitFramebuffer(0, 0, renderTarget.width, renderTarget.height,
+								0, 0, renderTarget.width, renderTarget.height,
+								GL.COLOR_BUFFER_BIT, GL.NEAREST);
+			
+		}
 		#if (debug || kha_debug_html5)
 		var error = SystemImpl.gl.getError();
 		switch (error) {
 			case GL.NO_ERROR:
-				
+
 			case GL.INVALID_ENUM:
 				trace("WebGL error: Invalid enum");
 			case GL.INVALID_VALUE:
@@ -187,9 +198,27 @@ class Graphics implements kha.graphics4.Graphics {
 		SystemImpl.gl.depthMask(depthMask);
 	}
 
-	public function viewport(x: Int, y: Int, width: Int, height: Int): Void{
-		var h: Int = renderTarget == null ? System.windowHeight(0) : renderTarget.height;
-		SystemImpl.gl.viewport(x, h - y - height, width, height);
+	public function viewport(x: Int, y: Int, width: Int, height: Int): Void {
+		if (renderTarget == null) {
+			SystemImpl.gl.viewport(x, System.windowHeight(0) - y - height, width, height);
+		}
+		else {
+			SystemImpl.gl.viewport(x, y, width, height);
+		}
+	}
+
+	public function scissor(x: Int, y: Int, width: Int, height: Int): Void {
+		SystemImpl.gl.enable(GL.SCISSOR_TEST);
+		if (renderTarget == null) {
+			SystemImpl.gl.scissor(x, System.windowHeight(0) - y - height, width, height);
+		}
+		else {
+			SystemImpl.gl.scissor(x, y, width, height);
+		}
+	}
+
+	public function disableScissor(): Void {
+		SystemImpl.gl.disable(GL.SCISSOR_TEST);
 	}
 
 	public function setDepthMode(write: Bool, mode: CompareMode): Void {
@@ -270,7 +299,7 @@ class Graphics implements kha.graphics4.Graphics {
 			return 0x8008;
 		}
 	}
-	
+
 	public function setBlendingMode(source: BlendingFactor, destination: BlendingFactor, operation: BlendingOperation,
 		alphaSource: BlendingFactor, alphaDestination: BlendingFactor, alphaOperation: BlendingOperation): Void {
 		if (source == BlendOne && destination == BlendZero) {
@@ -288,7 +317,7 @@ class Graphics implements kha.graphics4.Graphics {
 	}
 
 	public function setVertexBuffer(vertexBuffer: kha.graphics4.VertexBuffer): Void {
-		cast(vertexBuffer, VertexBuffer).set(0);
+		useVertexAttributes =cast(vertexBuffer, VertexBuffer).set(0);
 	}
 
 	public function setVertexBuffers(vertexBuffers: Array<kha.graphics4.VertexBuffer>): Void {
@@ -296,6 +325,7 @@ class Graphics implements kha.graphics4.Graphics {
 		for (vertexBuffer in vertexBuffers) {
 			offset += cast(vertexBuffer, VertexBuffer).set(offset);
 		}
+		useVertexAttributes=offset;
 	}
 
 	public function createIndexBuffer(indexCount: Int, usage: Usage, canRead: Bool = false): kha.graphics4.IndexBuffer {
@@ -324,11 +354,11 @@ class Graphics implements kha.graphics4.Graphics {
 			cast(texture, WebGLImage).set(cast(stage, TextureUnit).value);
 		}
 	}
-	
+
 	public function setTextureDepth(stage: kha.graphics4.TextureUnit, texture: kha.Image): Void {
 		cast(texture, WebGLImage).setDepth(cast(stage, TextureUnit).value);
 	}
-	
+
 	public function setTextureArray(unit: kha.graphics4.TextureUnit, texture: kha.Image): Void {
 		//not implemented yet.
 	}
@@ -401,7 +431,27 @@ class Graphics implements kha.graphics4.Graphics {
 	}
 
 	public function setTexture3DParameters(texunit: kha.graphics4.TextureUnit, uAddressing: TextureAddressing, vAddressing: TextureAddressing, wAddressing: TextureAddressing, minificationFilter: TextureFilter, magnificationFilter: TextureFilter, mipmapFilter: MipMapFilter): Void {
-	
+
+	}
+
+	public function setTextureCompareMode(texunit: kha.graphics4.TextureUnit, enabled: Bool) {
+		if (enabled) {
+			SystemImpl.gl.texParameteri(GL.TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+			SystemImpl.gl.texParameteri(GL.TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL.LEQUAL);
+		}
+		else {
+			SystemImpl.gl.texParameteri(GL.TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL.NONE);
+		}
+	}
+
+	public function setCubeMapCompareMode(texunit: kha.graphics4.TextureUnit, enabled: Bool) {
+		if (enabled) {
+			SystemImpl.gl.texParameteri(GL.TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+			SystemImpl.gl.texParameteri(GL.TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_FUNC, GL.LEQUAL);
+		}
+		else {
+			SystemImpl.gl.texParameteri(GL.TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL.NONE);
+		}
 	}
 
 	public function setCubeMap(stage: kha.graphics4.TextureUnit, cubeMap: kha.graphics4.CubeMap): Void {
@@ -413,7 +463,7 @@ class Graphics implements kha.graphics4.Graphics {
 			cubeMap.set(cast(stage, TextureUnit).value);
 		}
 	}
-	
+
 	public function setCubeMapDepth(stage: kha.graphics4.TextureUnit, cubeMap: kha.graphics4.CubeMap): Void {
 		cubeMap.setDepth(cast(stage, TextureUnit).value);
 	}
@@ -436,11 +486,16 @@ class Graphics implements kha.graphics4.Graphics {
 		setDepthMode(pipe.depthWrite, pipe.depthMode);
 		setStencilParameters(pipe.stencilMode, pipe.stencilBothPass, pipe.stencilDepthFail, pipe.stencilFail, pipe.stencilReferenceValue, pipe.stencilReadMask, pipe.stencilWriteMask);
 		setBlendingMode(pipe.blendSource, pipe.blendDestination, pipe.blendOperation, pipe.alphaBlendSource, pipe.alphaBlendDestination, pipe.alphaBlendOperation);
+		currentPipeline = pipe;
 		pipe.set();
 		colorMaskRed = pipe.colorWriteMaskRed;
 		colorMaskGreen = pipe.colorWriteMaskGreen;
 		colorMaskBlue = pipe.colorWriteMaskBlue;
 		colorMaskAlpha = pipe.colorWriteMaskAlpha;
+	}
+
+	public function setStencilReferenceValue(value: Int): Void {
+		SystemImpl.gl.stencilFunc(convertCompareMode(currentPipeline.stencilMode), value, currentPipeline.stencilReadMask);
 	}
 
 	public function setBool(location: kha.graphics4.ConstantLocation, value: Bool): Void {
@@ -449,6 +504,32 @@ class Graphics implements kha.graphics4.Graphics {
 
 	public function setInt(location: kha.graphics4.ConstantLocation, value: Int): Void {
 		SystemImpl.gl.uniform1i(cast(location, ConstantLocation).value, value);
+	}
+
+	public function setInt2(location: kha.graphics4.ConstantLocation, value1: Int, value2: Int): Void {
+		SystemImpl.gl.uniform2i(cast(location, ConstantLocation).value, value1, value2);
+	}
+
+	public function setInt3(location: kha.graphics4.ConstantLocation, value1: Int, value2: Int, value3: Int): Void {
+		SystemImpl.gl.uniform3i(cast(location, ConstantLocation).value, value1, value2, value3);
+	}
+
+	public function setInt4(location: kha.graphics4.ConstantLocation, value1: Int, value2: Int, value3: Int, value4: Int): Void {
+		SystemImpl.gl.uniform4i(cast(location, ConstantLocation).value, value1, value2, value3, value4);
+	}
+
+	public function setInts(location: kha.graphics4.ConstantLocation, values: Int32Array): Void {
+		var webglLocation = cast(location, ConstantLocation);
+		switch (webglLocation.type) {
+			case GL.INT_VEC2:
+				SystemImpl.gl.uniform2iv(webglLocation.value, cast values);
+			case GL.INT_VEC3:
+				SystemImpl.gl.uniform3iv(webglLocation.value, cast values);
+			case GL.INT_VEC4:
+				SystemImpl.gl.uniform4iv(webglLocation.value, cast values);
+			default:
+				SystemImpl.gl.uniform1iv(webglLocation.value, cast values);
+		}
 	}
 
 	public function setFloat(location: kha.graphics4.ConstantLocation, value: FastFloat): Void {
@@ -518,6 +599,9 @@ class Graphics implements kha.graphics4.Graphics {
 		var type = SystemImpl.elementIndexUint == null ? GL.UNSIGNED_SHORT : GL.UNSIGNED_INT;
 		var size = type == GL.UNSIGNED_SHORT ? 2 : 4;
 		SystemImpl.gl.drawElements(GL.TRIANGLES, count == -1 ? indicesCount : count, type, start * size);
+		for(i in 0...useVertexAttributes){
+			SystemImpl.gl.disableVertexAttribArray(i);
+		}
 	}
 
 	private function convertStencilAction(action: StencilAction) {
@@ -541,54 +625,44 @@ class Graphics implements kha.graphics4.Graphics {
 		}
 	}
 
-	public function setStencilParameters(compareMode: CompareMode, bothPass: StencilAction, depthFail: StencilAction, stencilFail: StencilAction, referenceValue: Int, readMask: Int = 0xff, writeMask: Int = 0xff): Void {
+	function convertCompareMode(compareMode: CompareMode) {
+		switch (compareMode) {
+			case Always:
+				return GL.ALWAYS;
+			case Equal:
+				return GL.EQUAL;
+			case Greater:
+				return GL.GREATER;
+			case GreaterEqual:
+				return GL.GEQUAL;
+			case Less:
+				return GL.LESS;
+			case LessEqual:
+				return GL.LEQUAL;
+			case Never:
+				return GL.NEVER;
+			case NotEqual:
+				return GL.NOTEQUAL;
+		}
+	}
+
+	public function setStencilParameters(compareMode: CompareMode, bothPass: StencilAction, depthFail: StencilAction, stencilFail: StencilAction, referenceValue: StencilValue, readMask: Int = 0xff, writeMask: Int = 0xff): Void {
 		if (compareMode == CompareMode.Always && bothPass == StencilAction.Keep
 			&& depthFail == StencilAction.Keep && stencilFail == StencilAction.Keep) {
 				SystemImpl.gl.disable(GL.STENCIL_TEST);
 			}
 		else {
 			SystemImpl.gl.enable(GL.STENCIL_TEST);
-			var stencilFunc = 0;
-			switch (compareMode) {
-				case CompareMode.Always:
-					stencilFunc = GL.ALWAYS;
-				case CompareMode.Equal:
-					stencilFunc = GL.EQUAL;
-				case CompareMode.Greater:
-					stencilFunc = GL.GREATER;
-				case CompareMode.GreaterEqual:
-					stencilFunc = GL.GEQUAL;
-				case CompareMode.Less:
-					stencilFunc = GL.LESS;
-				case CompareMode.LessEqual:
-					stencilFunc = GL.LEQUAL;
-				case CompareMode.Never:
-					stencilFunc = GL.NEVER;
-				case CompareMode.NotEqual:
-					stencilFunc = GL.NOTEQUAL;
-			}
+			var stencilFunc = convertCompareMode(compareMode);
 			SystemImpl.gl.stencilMask(writeMask);
 			SystemImpl.gl.stencilOp(convertStencilAction(stencilFail), convertStencilAction(depthFail), convertStencilAction(bothPass));
-			SystemImpl.gl.stencilFunc(stencilFunc, referenceValue, readMask);
+			switch (referenceValue) {
+				case Static(value):
+					SystemImpl.gl.stencilFunc(stencilFunc, value, readMask);
+				case Dynamic:
+					SystemImpl.gl.stencilFunc(stencilFunc, 0, readMask);
+			}
 		}
-	}
-
-	public function scissor(x: Int, y: Int, width: Int, height: Int): Void {
-		SystemImpl.gl.enable(GL.SCISSOR_TEST);
-		if (renderTarget == null) {
-			SystemImpl.gl.scissor(x, System.windowHeight(0) - y - height, width, height);
-		}
-		else {
-			SystemImpl.gl.scissor(x, y, width, height);
-		}
-	}
-
-	public function disableScissor(): Void {
-		SystemImpl.gl.disable(GL.SCISSOR_TEST);
-	}
-
-	public function renderTargetsInvertedY(): Bool {
-		return true;
 	}
 
 	public function drawIndexedVerticesInstanced(instanceCount : Int, start: Int = 0, count: Int = -1) {

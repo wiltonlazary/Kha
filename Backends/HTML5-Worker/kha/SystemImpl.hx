@@ -19,7 +19,9 @@ class GamepadStates {
 
 class SystemImpl {
 	static var options: SystemOptions;
+	@:allow(kha.Window)
 	static var width: Int = 800;
+	@:allow(kha.Window)
 	static var height: Int = 600;
 	static var dpi: Int = 96;
 	static inline var maxGamepads: Int = 4;
@@ -29,9 +31,9 @@ class SystemImpl {
 	static var surface: Surface;
 	static var gamepads: Array<Gamepad>;
 
-	public static function init(options: SystemOptions, callback: Void -> Void) {
+	public static function init(options: SystemOptions, callback: Window -> Void) {
 		Worker.handleMessages(messageHandler);
-		
+
 		Shaders.init();
 		var shaders = new Array<Dynamic>();
 		for (field in Reflect.fields(Shaders)) {
@@ -45,11 +47,11 @@ class SystemImpl {
 			}
 		}
 		Worker.postMessage({ command: 'setShaders', shaders: shaders });
-			
+
 		SystemImpl.options = options;
-		
+
 		//haxe.Log.trace = untyped js.Boot.__trace; // Hack for JS trace problems
-		
+
 		keyboard = new Keyboard();
 		mouse = new Mouse();
 		surface = new Surface();
@@ -57,33 +59,23 @@ class SystemImpl {
 		for (i in 0...maxGamepads) {
 			gamepads[i] = new Gamepad(i);
 		}
-		
+
 		var g4 = new kha.html5worker.Graphics();
 		frame = new Framebuffer(0, null, null, g4);
 		frame.init(new kha.graphics2.Graphics1(frame), new kha.graphics4.Graphics2(frame), g4);
 
 		Scheduler.init();
 		Scheduler.start();
-		
-		callback();
-	}
-	
-	public static function initEx(title: String, options: Array<WindowOptions>, windowCallback: Int -> Void, callback: Void -> Void) {
-		trace('initEx is not supported on the html5 target, running init() with first window options');
 
-		init({title : title, width : options[0].width, height : options[0].height}, callback);
-
-		if (windowCallback != null) {
-			windowCallback(0);
-		}
+		callback(new Window());
 	}
 
 	public static function windowWidth(windowId: Int = 0): Int {
-		return width;
+		return Window.get(0).width;
 	}
 
 	public static function windowHeight(windowId: Int = 0): Int {
-		return height;
+		return Window.get(0).height;
 	}
 
 	public static function screenDpi(): Int {
@@ -110,8 +102,17 @@ class SystemImpl {
 		return "HTML5-Worker";
 	}
 
-	public static function requestShutdown(): Void {
-		
+	public static function vibrate(ms:Int): Void {
+		js.Browser.navigator.vibrate(ms);
+	}
+
+	public static function getLanguage(): String {
+		final lang = js.Browser.navigator.language;
+		return lang.substr(0, 2).toLowerCase();
+	}
+
+	public static function requestShutdown(): Bool {
+		return false;
 	}
 
 	public static function getMouse(num: Int): Mouse {
@@ -125,11 +126,11 @@ class SystemImpl {
 	}
 
 	public static function lockMouse(): Void {
-		
+
 	}
 
 	public static function unlockMouse(): Void {
-		
+
 	}
 
 	public static function canLockMouse(): Bool {
@@ -141,7 +142,7 @@ class SystemImpl {
 	}
 
 	public static function notifyOfMouseLockChange(func: Void -> Void, error: Void -> Void): Void {
-		
+
 	}
 
 	public static function removeFromMouseLockChange(func : Void -> Void, error  : Void -> Void) : Void {
@@ -161,19 +162,19 @@ class SystemImpl {
 	}
 
 	public static function requestFullscreen(): Void {
-		
+
 	}
 
 	public static function exitFullscreen(): Void {
-		
+
 	}
 
 	public static function notifyOfFullscreenChange(func: Void -> Void, error: Void -> Void): Void {
-		
+
 	}
 
 	public static function removeFromFullscreenChange(func: Void -> Void, error: Void -> Void): Void {
-		
+
 	}
 
 	public static function changeResolution(width: Int, height: Int): Void {
@@ -185,13 +186,13 @@ class SystemImpl {
 	}
 
 	public static function loadUrl(url: String): Void {
-		
+
 	}
 
 	public static function getGamepadId(index: Int): String {
 		return "unkown";
 	}
-	
+
 	static function messageHandler(value: Dynamic): Void {
 		switch (value.data.command) {
 		case 'patch':
@@ -208,7 +209,7 @@ class SystemImpl {
 			if (frame != null) {
 				Scheduler.executeFrame();
 				Worker.postMessage({ command: 'beginFrame' });
-				System.render(0, frame);
+				System.render([frame]);
 				Worker.postMessage({ command: 'endFrame' });
 			}
 		case 'setWindowSize':
@@ -229,5 +230,25 @@ class SystemImpl {
 		case 'mouseWheel':
 			mouse.sendWheelEvent(0, value.data.delta);
 		}
+	}
+
+	public static function safeZone(): Float {
+		return 1.0;
+	}
+
+	public static function login(): Void {
+
+	}
+
+	public static function automaticSafeZone(): Bool {
+		return true;
+	}
+
+	public static function setSafeZone(value: Float): Void {
+
+	}
+
+	public static function unlockAchievement(id: Int): Void {
+
 	}
 }
